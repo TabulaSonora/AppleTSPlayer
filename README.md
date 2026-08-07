@@ -42,6 +42,14 @@ TS_SCCORE_DLL=~/SCCore.dll TS_TEST_MIDI=~/song.mid swift test
 Tests that need the ROM or a MIDI file skip when the environment does not name them, so the suite
 runs anywhere.
 
+## Licence
+
+BSD 3-Clause, the same as the engine — see [LICENSE](LICENSE).
+
+That covers this repository. It does not cover `SCCore.dll`, which is Roland's and yours to supply
+under whatever licence came with your copy of SOUND Canvas VA. `Sources/ThirdParty/nlohmann/json.hpp`
+is MIT and carries its own notice in the header.
+
 ## How it fits together
 
 The engine renders at 32 kHz and is single-threaded by contract. A render thread owns it and writes
