@@ -43,6 +43,21 @@ struct EngineControlsView: View {
                 .help("Voices before the engine starts stealing them")
             }
 
+            Section {
+                Toggle("Extended resampler", isOn: binding(\.extendedInterpolation))
+                    .help("A wider band-limiting kernel, and no ceiling on how fast a wave is read")
+            } header: {
+                Text("Resampler")
+            } footer: {
+                // Stated plainly because it is the one setting whose default is *not* the module.
+                // Someone comparing this player against a Sound Canvas and hearing a glide that
+                // slides where theirs stalls should be able to find out why.
+                Text("The module reads a wave at no more than four times its own rate, so a "
+                     + "portamento dive from high up holds before it slides. Lifting that limit "
+                     + "needs the wider kernel to stay clean. Turn it off to hear the module "
+                     + "exactly, limit and all.")
+            }
+
             Section("Effects") {
                 Toggle("Reverb", isOn: binding(\.reverb))
                     .help("The module's reverb send bus")

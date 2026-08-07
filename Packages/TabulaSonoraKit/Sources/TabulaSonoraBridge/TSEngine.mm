@@ -80,6 +80,7 @@ void fill_error(NSError **error, TSEngineError code, const std::string &message)
         _index = index;
         _program = state.program;
         _bank = state.bank;
+        _bankLSB = state.bank_lsb;
         _volume = state.volume;
         _expression = state.expression;
         _pan = state.pan;
@@ -89,7 +90,9 @@ void fill_error(NSError **error, TSEngineError code, const std::string &message)
         _present = state.present;
         _drums = state.drums;
         _kit = state.kit;
+        _rxChannel = state.rx_channel;
         _map = static_cast<TSToneMap>(state.map);
+        _lookupBank = state.lookupBank;
         _name = to_ns(state.name);
     }
     return self;

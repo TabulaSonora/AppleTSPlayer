@@ -43,11 +43,27 @@ typedef struct {
     bool delay;
     bool efx;
 
+    /// The wide band-limiting resampler, and with it the removal of the pitch increment ceiling.
+    ///
+    /// On by default, and the one place the engine knowingly departs from `SCCore.dll`. The module
+    /// saturates its resampler increment at four times a wave's native rate, because its 4-tap
+    /// kernel is only 14 dB down at Nyquist and anything faster folds back into the band. A
+    /// portamento glide is summed into that same quantity, so a slide beginning three octaves up is
+    /// pinned at the ceiling and does not move at all until it has descended past it. Upstream
+    /// lifts the ceiling and fits a wider kernel to the module's own response, which is meant to
+    /// leave ordinary material sounding the same and only changes the rates the module could not
+    /// reach.
+    ///
+    /// Off is the module, ceiling and all -- which is what a render being compared against the DLL
+    /// needs, and what upstream's own gates use.
+    bool extendedInterpolation;
+
     /// Linear gain on the finished mix. Applied live, without a rebuild.
     double outputGain;
 } TSEngineSettings;
 
-/// The engine's defaults: an SC-8820 with the module's own polyphony, two ports and every effect.
+/// The engine's defaults: an SC-8820 with the module's own polyphony, two ports, every effect and
+/// the extended resampler.
 extern TSEngineSettings TSEngineSettingsDefault(void);
 
 /// Parts the engine can address at most -- sixty-four, `port * 16 + channel`.

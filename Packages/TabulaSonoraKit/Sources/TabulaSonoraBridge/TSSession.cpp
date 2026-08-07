@@ -21,6 +21,7 @@ extern "C" TSEngineSettings TSEngineSettingsDefault(void)
     settings.chorus = defaults.chorus;
     settings.delay = defaults.delay;
     settings.efx = defaults.efx;
+    settings.extendedInterpolation = defaults.extended_interpolation;
     settings.outputGain = defaults.output_gain;
     return settings;
 }
@@ -86,19 +87,24 @@ void Session::load_song(const std::string& path)
     smf::Song parsed = smf::load(bytes, sample_rate, file_name(path));
     auto events = std::move(parsed.events);
 
-    // Which parts the file touches at all, so the mixer can show those and no others. The port is
-    // folded exactly as the engine folds it, because the question is "which strips will make a
-    // sound": a file tagged for four ports playing on a two-port engine lands its port C traffic
-    // on port A.
+    // Which channel addresses the file sends on. The port is folded exactly as the engine folds it,
+    // because a file tagged for four ports playing on a two-port engine lands its port C traffic on
+    // port A.
+    //
+    // Deliberately not "which parts the file touches": a part is reached by matching its receive
+    // channel, not by being indexed with it, so the two are the same question only until something
+    // moves a part. `capture` turns these channels into strips by asking the engine what is
+    // listening to each of them.
     const int ports = std::max(1, settings_.ports);
-    used_parts_.fill(false);
+    used_channels_.fill(false);
     for (const auto& message : events) {
         if (message.kind != MidiEventKind::channel) {
             continue;
         }
-        const int part = ((message.port & (ports - 1)) * Sequence::channel_count) + message.channel();
-        if (part >= 0 && part < TS_MAX_PARTS) {
-            used_parts_[static_cast<std::size_t>(part)] = true;
+        const int address =
+            ((message.port & (ports - 1)) * Sequence::channel_count) + message.channel();
+        if (address >= 0 && address < TS_MAX_PARTS) {
+            used_channels_[static_cast<std::size_t>(address)] = true;
         }
     }
 
@@ -120,7 +126,7 @@ void Session::unload_song()
     song_name_.clear();
     song_length_ = 0;
     song_loop_.reset();
-    used_parts_.fill(false);
+    used_channels_.fill(false);
     if (engine_) {
         engine_->reset();
     }
@@ -133,7 +139,8 @@ void Session::set_settings(const TSEngineSettings& settings)
                             || settings.polyphony != settings_.polyphony
                             || settings.ports != settings_.ports || settings.reverb != settings_.reverb
                             || settings.chorus != settings_.chorus || settings.delay != settings_.delay
-                            || settings.efx != settings_.efx;
+                            || settings.efx != settings_.efx
+                            || settings.extendedInterpolation != settings_.extendedInterpolation;
 
     settings_ = settings;
 
@@ -193,6 +200,22 @@ void Session::panic()
     }
 }
 
+void Session::silence()
+{
+    if (!engine_) {
+        return;
+    }
+
+    constexpr int all_sound_off = 120;
+
+    const int ports = std::max(1, settings_.ports);
+    for (int port = 0; port < ports; ++port) {
+        for (int channel = 0; channel < Sequence::channel_count; ++channel) {
+            send_control(port, channel, all_sound_off, 0);
+        }
+    }
+}
+
 void Session::render(std::span<float> left, std::span<float> right)
 {
     if (player_) {
@@ -208,6 +231,24 @@ void Session::render(std::span<float> left, std::span<float> right)
     // a stutter rather than the silence that is meant.
     std::fill(left.begin(), left.end(), 0.0F);
     std::fill(right.begin(), right.end(), 0.0F);
+}
+
+void Session::render_live(std::span<float> left, std::span<float> right)
+{
+    // The generator, not the sequence player: this is the block a stopped transport renders, and
+    // going through the player would step the song forward under a keyboard.
+    if (engine_) {
+        engine_->render(left, right);
+        return;
+    }
+
+    std::fill(left.begin(), left.end(), 0.0F);
+    std::fill(right.begin(), right.end(), 0.0F);
+}
+
+int Session::active_voices() const noexcept
+{
+    return engine_ ? engine_->active_voices() : 0;
 }
 
 void Session::send_channel(int port, int status, int data1, int data2)
@@ -280,15 +321,28 @@ void Session::capture(SessionSnapshot& into) const
 
         state.program = part.program;
         state.bank = part.bank;
+        state.bank_lsb = part.bank_lsb;
         state.volume = part.volume();
         state.expression = part.expression();
         state.pan = part.pan;
         state.voices = counts[static_cast<std::size_t>(index)];
         state.muted = channels_.is_muted(index);
         state.soloed = channels_.is_soloed(index);
-        state.present = used_parts_[static_cast<std::size_t>(index)];
         state.drums = drums;
         state.kit = kit;
+        state.rx_channel = engine_->part_rx_channel(index);
+
+        // Whether the file reaches this part, asked through the channel the part is *listening on*
+        // rather than through its slot -- the same walk the engine does to deliver a message, which
+        // is what makes this the question "will this strip make a sound".
+        //
+        // Matching is within a port, so the file's channel is looked up on this part's own port. A
+        // receive channel outside 0-15 is the module's "off", and a part detached from every
+        // channel hears nothing however much the file sends.
+        const int port = index / Sequence::channel_count;
+        state.present = state.rx_channel >= 0 && state.rx_channel < Sequence::channel_count
+                        && used_channels_[static_cast<std::size_t>(
+                            port * Sequence::channel_count + state.rx_channel)];
         state.map = static_cast<int>(engine_->part_tone_map(index));
         state.lookupBank = engine_->part_lookup_bank(index);
 
@@ -372,6 +426,7 @@ ToneGeneratorOptions Session::options() const
     options.chorus = settings_.chorus;
     options.delay = settings_.delay;
     options.efx = settings_.efx;
+    options.extended_interpolation = settings_.extendedInterpolation;
     options.output_gain = settings_.outputGain;
     options.channels = &channels_;
     return options;

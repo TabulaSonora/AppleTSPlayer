@@ -14,9 +14,24 @@ import TabulaSonoraKit
 struct MixerView: View {
     @Environment(Player.self) private var player
 
+    /// The parts worth a strip, in the order they are labelled.
+    ///
+    /// Sorted rather than left in slot order, because the label is the receive channel and the two
+    /// part company as soon as a bulk dump moves a part -- a column reading 10, 1, 2, 3 looks like
+    /// broken numbering rather than like information. Port first, so a multi-port score still groups
+    /// the way an interface labels it, and the slot breaks ties: two parts pointed at one channel is
+    /// legal in GS and both strips have to appear.
     private var visible: [PartState] {
         let present = player.parts.filter(\.isPresent)
-        return present.isEmpty ? player.parts : present
+        return (present.isEmpty ? player.parts : present).sorted { left, right in
+            if left.index / 16 != right.index / 16 {
+                return left.index / 16 < right.index / 16
+            }
+            if left.displayChannel != right.displayChannel {
+                return left.displayChannel < right.displayChannel
+            }
+            return left.index < right.index
+        }
     }
 
     private var anySoloed: Bool { player.parts.contains(where: \.isSoloed) }
@@ -51,6 +66,7 @@ private struct PartRow: View {
                 .font(.caption.monospacedDigit().weight(.medium))
                 .foregroundStyle(.secondary)
                 .frame(width: 34, alignment: .leading)
+                .help(part.address)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(part.name.isEmpty ? "—" : part.name)
@@ -66,6 +82,8 @@ private struct PartRow: View {
                     Tag(text: part.map.name, tint: .secondary)
                 }
             }
+            // The strip has room for a name and an abbreviation; the numbers behind them go here.
+            .help(part.detail)
 
             Spacer(minLength: 8)
 

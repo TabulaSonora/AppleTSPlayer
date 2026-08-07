@@ -37,6 +37,19 @@ public struct EngineSettings: Equatable, Sendable {
     public var chorus: Bool
     public var delay: Bool
     public var efx: Bool
+
+    /// The wide band-limiting resampler, and with it the removal of the pitch increment ceiling.
+    ///
+    /// On by default, and the one place the engine knowingly departs from `SCCore.dll`. The module
+    /// pins its resampler increment at four times a wave's native rate, so a portamento glide
+    /// starting three octaves up does not move until it has descended past that ceiling -- audible
+    /// as a dive that holds for half a second before it slides. Upstream lifts the ceiling and fits
+    /// a wider kernel to the module's own response, which leaves ordinary material sounding the
+    /// same and changes only the rates the module could not reach.
+    ///
+    /// Off is the module as it is, ceiling and all.
+    public var extendedInterpolation: Bool
+
     /// Linear gain on the finished mix. Applied live, without a rebuild.
     public var outputGain: Double
 
@@ -51,6 +64,7 @@ public struct EngineSettings: Equatable, Sendable {
         chorus = settings.chorus
         delay = settings.delay
         efx = settings.efx
+        extendedInterpolation = settings.extendedInterpolation
         outputGain = settings.outputGain
     }
 
@@ -62,6 +76,7 @@ public struct EngineSettings: Equatable, Sendable {
                          chorus: chorus,
                          delay: delay,
                          efx: efx,
+                         extendedInterpolation: extendedInterpolation,
                          outputGain: outputGain)
     }
 }
@@ -73,7 +88,15 @@ public struct PartState: Identifiable, Equatable, Sendable {
     public var id: Int { index }
 
     public let program: Int
+
+    /// Bank select MSB, which carries the variation.
     public let bank: Int
+
+    /// Bank select LSB, which on this module names the vintage: 1-4 pick one and 0 keeps the
+    /// configured default. Carried beside the MSB because the pair is what a patch list is indexed
+    /// by, and either one alone identifies nothing.
+    public let bankLSB: Int
+
     public let volume: Int
     public let expression: Int
     public let pan: Int
@@ -90,23 +113,90 @@ public struct PartState: Identifiable, Equatable, Sendable {
     public let isDrums: Bool
     /// The kit sounding on a drum part, or nil.
     public let kit: Int?
+
+    /// The MIDI channel this part listens on, zero-based -- **not** its slot.
+    ///
+    /// Parts are matched by their receive channel rather than indexed by it: GS can point several
+    /// parts at one channel or detach one from every channel, so `index % 16` names the right
+    /// channel only until something moves a part -- and a bulk dump moves parts by definition.
+    ///
+    /// -1 when no engine reported one, and 16 for the module's "off". Use `displayChannel`, which
+    /// is what `label` and the mixer's ordering are built from.
+    public let rxChannel: Int
+
+    /// The channel a row shows, falling back to the slot when the part names none.
+    ///
+    /// A cleared snapshot reports -1 and a detached part reports 16; neither is a channel, and
+    /// labelling every row "1" or "17" would be worse than the slot it came up on. A detached part
+    /// is normally filtered out by `isPresent` before this matters -- it hears nothing, so nothing
+    /// the file sends reaches it.
+    public var displayChannel: Int {
+        (0..<16).contains(rxChannel) ? rxChannel : index % 16
+    }
     /// The tone map this part resolves against, which under XG is not the configured one.
     public let map: ToneMap
+
+    /// The bank the melodic lookup is given, which under XG is not `bank`.
+    public let lookupBank: Int
     /// The sounding instrument's name -- the tone's, or the kit's on a drum part.
     public let name: String
 
     /// The part as a player would number it: port letter and 1-based channel, e.g. "A1", "B16".
+    ///
+    /// The channel comes from the part's own routing, not from the slot. Labelling a row
+    /// `index % 16 + 1` names the channel a part happens to start on, and goes on naming it after a
+    /// bulk dump has pointed the part somewhere else. The port still comes from the slot, because a
+    /// port is sixteen slots of one.
     public var label: String {
         let port = index / 16
-        let channel = index % 16 + 1
         let letter = String(UnicodeScalar(UInt8(65 + port)))
-        return "\(letter)\(channel)"
+        return "\(letter)\(displayChannel + 1)"
+    }
+
+    /// `label` spelled out, because "A1" is an abbreviation nothing else in the interface expands.
+    ///
+    /// Built from the same channel the label is, so the two cannot disagree about which one a part
+    /// is on.
+    public var address: String {
+        let port = index / 16
+        let letter = String(UnicodeScalar(UInt8(65 + port)))
+        return "Port \(letter), channel \(displayChannel + 1)"
+    }
+
+    /// The numbers behind the name.
+    ///
+    /// The sounding instrument's name answers "what is this"; this answers "which entry is it",
+    /// which is the question anyone comparing against a module's patch chart or a MIDI capture
+    /// actually has.
+    ///
+    /// Programs are counted from one, as every chart and the module's own display counts them, with
+    /// the wire value beside it so there is no guessing which convention is meant. Both halves of
+    /// the bank select appear because neither identifies anything alone: the MSB carries the
+    /// variation and the LSB names the vintage.
+    public var detail: String {
+        var detail = ""
+
+        if isDrums, let kit {
+            detail += "Drum kit \(kit) · "
+        }
+
+        detail += "Program \(program + 1) (PC \(program))"
+        detail += " · Bank MSB \(bank), LSB \(bankLSB)"
+
+        // Under XG the melodic lookup is not given the bank the part was sent, so saying only what
+        // was sent would misdescribe what is sounding.
+        if !isDrums, lookupBank != bank {
+            detail += " (resolves against bank \(lookupBank))"
+        }
+
+        return detail
     }
 
     init(_ state: TSPartState) {
         index = state.index
         program = state.program
         bank = state.bank
+        bankLSB = state.bankLSB
         volume = state.volume
         expression = state.expression
         pan = state.pan
@@ -116,7 +206,9 @@ public struct PartState: Identifiable, Equatable, Sendable {
         isPresent = state.present
         isDrums = state.drums
         kit = state.kit >= 0 ? state.kit : nil
+        rxChannel = state.rxChannel
         map = ToneMap(rawValue: state.map.rawValue) ?? .sc8820
+        lookupBank = state.lookupBank
         name = state.name
     }
 }

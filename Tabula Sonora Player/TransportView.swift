@@ -33,6 +33,8 @@ struct TransportView: View {
                            }
                        })
                 .disabled(player.songName == nil)
+                .help("Seek. Jumping replays the controllers up to that point, so the parts sound "
+                      + "as they would have.")
 
                 HStack {
                     Text(time(scrubbing ?? player.position))

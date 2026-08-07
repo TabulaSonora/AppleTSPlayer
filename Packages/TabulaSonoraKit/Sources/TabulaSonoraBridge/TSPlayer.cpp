@@ -113,7 +113,17 @@ void Player::set_paused(bool paused)
     if (paused) {
         ring_.set_starvation_expected(true);
     }
+
     paused_.store(paused, std::memory_order_relaxed);
+
+    // Cut whatever the song was holding, after the flag is set so the sequencer has already stopped
+    // advancing. Without this a note held across a pause never reaches its note-off -- the render
+    // loop goes on rendering, because a stopped transport still has to answer a keyboard -- and the
+    // chord sounds until playback resumes.
+    if (paused) {
+        const std::lock_guard<std::mutex> guard{lock_};
+        session_.silence();
+    }
 }
 
 void Player::set_workgroup(void* workgroup) noexcept
@@ -245,6 +255,10 @@ void Player::run()
 
     int until_publish = 0;
 
+    /// Whether live MIDI arrived since the last block. Local to the render loop: the inbox is
+    /// drained here and nowhere else.
+    bool live_activity = false;
+
     while (!quit_.load(std::memory_order_relaxed)) {
         // How long to wait before looking again, decided under the lock and slept *outside* it.
         // Sleeping while holding it would make an idle transport hold the session almost
@@ -260,6 +274,7 @@ void Player::run()
 
             const std::lock_guard<std::mutex> guard{lock_};
 
+            live_activity = live_activity || !midi.empty();
             for (const auto& message : midi) {
                 session_.send_channel(message.port, message.status, message.data1, message.data2);
             }
@@ -276,8 +291,24 @@ void Player::run()
                 pending_seek_.reset();
             }
 
-            const bool idle = paused_.load(std::memory_order_relaxed) || !session_.has_rom()
-                              || session_.complete();
+            // Whether the *song* should be advancing.
+            const bool transport_idle = paused_.load(std::memory_order_relaxed)
+                                        || !session_.has_rom() || session_.complete();
+
+            // Whether there is nonetheless sound to make.
+            //
+            // A stopped transport is not the same thing as a silent instrument: a key held on a
+            // MIDI keyboard, or the release tail of one just let go, has to keep being rendered.
+            // Conflating the two meant live notes could only be heard over a playing song --
+            // pressing a key with nothing loaded produced nothing at all.
+            //
+            // Live messages count for one block on their own so that a controller change with no
+            // note behind it is not dropped; after that, sounding voices are what keep it awake,
+            // which covers releases and held pedals without a timer.
+            const bool live = session_.has_rom() && (live_activity || session_.active_voices() > 0);
+            live_activity = false;
+
+            const bool idle = transport_idle && !live;
 
             if (wanted_workgroup_ != static_cast<void*>(joined)) {
                 if (joined != nullptr) {
@@ -328,8 +359,14 @@ void Player::run()
                 // fraction of a block keeps the thread responsive to a seek without spinning.
                 nap = std::chrono::microseconds{block_frames * 1000000 / Session::sample_rate / 4};
             } else {
-
-                session_.render(left, right);
+                // The sequencer is only stepped when the transport is actually running. Rendering
+                // live goes straight to the generator, so a note played while stopped sounds
+                // without dragging the song forward under it.
+                if (transport_idle) {
+                    session_.render_live(left, right);
+                } else {
+                    session_.render(left, right);
+                }
 
                 // Interleaved into the ring, which is what the callback copies out of in one pass.
                 for (int frame = 0; frame < block_frames; ++frame) {
@@ -339,8 +376,13 @@ void Player::run()
                 }
                 ring_.write(block);
 
-                audible_.store(session_.position() - static_cast<std::int64_t>(ring_.queued()),
-                               std::memory_order_relaxed);
+                // Only while the song is actually moving. Live blocks add to the ring without
+                // advancing the sequencer, so this subtraction would walk the reported position
+                // backwards and drag the scrubber with it.
+                if (!transport_idle) {
+                    audible_.store(session_.position() - static_cast<std::int64_t>(ring_.queued()),
+                                   std::memory_order_relaxed);
+                }
             }
 
             // Roughly every 20 ms of audio: far finer than any display refresh, and cheap against

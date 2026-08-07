@@ -34,6 +34,42 @@ struct RenderTests {
         }
     }
 
+    /// The extended resampler has to reach the generator, not merely the settings struct.
+    ///
+    /// It is the one setting whose default departs from the module, so a version of it that is
+    /// stored, restored and shown in the UI while never being forwarded to `ToneGeneratorOptions`
+    /// would look entirely correct from the outside. Two renders of the same note settle that: same
+    /// length, and they must not be the same bytes.
+    @Test(.enabled(if: romPath != nil))
+    func theExtendedResamplerReachesTheRender() throws {
+        func render(extendedInterpolation: Bool) throws -> Data {
+            let engine = TSEngine()
+            try engine.loadROM(atPath: Self.romPath!, verifyFully: false)
+
+            var settings = TSEngineSettingsDefault()
+            settings.extendedInterpolation = extendedInterpolation
+            engine.apply(settings)
+
+            let midi = URL.temporaryDirectory
+                .appending(path: "tabula-sonora-resampler-\(extendedInterpolation).mid")
+            try TestSong.oneHighNote().write(to: midi)
+            defer { try? FileManager.default.removeItem(at: midi) }
+            try engine.loadSong(atPath: midi.path(percentEncoded: false))
+
+            let wav = URL.temporaryDirectory
+                .appending(path: "tabula-sonora-resampler-\(extendedInterpolation).wav")
+            defer { try? FileManager.default.removeItem(at: wav) }
+            try engine.exportWAV(toPath: wav.path(percentEncoded: false)) { _ in true }
+            return try Data(contentsOf: wav)
+        }
+
+        let extended = try render(extendedInterpolation: true)
+        let module = try render(extendedInterpolation: false)
+
+        #expect(extended.count == module.count, "the switch is a kernel, not a length")
+        #expect(extended != module, "the setting never reached the generator")
+    }
+
     @Test(.enabled(if: romPath != nil && midiPath != nil))
     func rendersASongToAWAVThatIsNotSilent() throws {
         let engine = TSEngine()

@@ -45,7 +45,15 @@ typedef NS_ERROR_ENUM(TSEngineErrorDomain, TSEngineError) {
 /// `port * 16 + channel`.
 @property (nonatomic, readonly) NSInteger index;
 @property (nonatomic, readonly) NSInteger program;
+
+/// Bank select MSB, which carries the variation.
 @property (nonatomic, readonly) NSInteger bank;
+
+/// Bank select LSB, which on this module names the vintage: 1-4 pick one and 0 keeps the configured
+/// default. Shown beside the MSB because the pair is what a patch list is indexed by, and either one
+/// alone identifies nothing.
+@property (nonatomic, readonly) NSInteger bankLSB;
+
 @property (nonatomic, readonly) NSInteger volume;
 @property (nonatomic, readonly) NSInteger expression;
 @property (nonatomic, readonly) NSInteger pan;
@@ -61,8 +69,22 @@ typedef NS_ERROR_ENUM(TSEngineErrorDomain, TSEngineError) {
 @property (nonatomic, readonly) BOOL drums;
 /// The kit sounding on a drum part, or -1.
 @property (nonatomic, readonly) NSInteger kit;
+
+/// The MIDI channel this part listens on, zero-based -- **not** its slot.
+///
+/// What a mixer row has to be labelled with. Parts are matched by their receive channel rather than
+/// indexed by it, since GS can point several parts at one channel or detach one from every channel,
+/// so `index % 16` names the right channel only until something moves a part.
+///
+/// -1 when no engine reported one, and 16 for the module's "off" -- a part detached from every
+/// channel. Neither is a channel to label a row with.
+@property (nonatomic, readonly) NSInteger rxChannel;
 /// The tone map this part resolves against, which under XG is not the engine's configured one.
 @property (nonatomic, readonly) TSToneMap map;
+
+/// The bank the melodic lookup is given, which under XG is not the bank the part was sent. Naming
+/// only what was sent would misdescribe what is sounding.
+@property (nonatomic, readonly) NSInteger lookupBank;
 /// The sounding instrument's name -- the tone's, or the kit's on a drum part.
 @property (nonatomic, readonly) NSString *name;
 

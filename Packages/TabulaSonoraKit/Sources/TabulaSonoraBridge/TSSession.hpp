@@ -22,7 +22,15 @@ namespace ts::apple {
 /// One part's state, as of the last block rendered.
 struct PartState {
     int program = 0;
+
+    /// Bank select MSB, which carries the variation.
     int bank = 0;
+
+    /// Bank select LSB, which on this module names the vintage: 1-4 pick one and 0 keeps the
+    /// configured default. Worth carrying beside the MSB because the pair is what a patch list is
+    /// indexed by, and either one alone identifies nothing.
+    int bank_lsb = 0;
+
     int volume = 0;
     int expression = 0;
     int pan = 0x40;
@@ -40,6 +48,18 @@ struct PartState {
 
     /// The kit sounding on a drum part, or -1.
     int kit = -1;
+
+    /// The MIDI channel this part listens on, zero-based -- **not** its slot.
+    ///
+    /// A mixer row has to be labelled with this. Parts are matched by their receive channel rather
+    /// than indexed by it -- `dispatch_channel` walks the list looking for a match, because GS can
+    /// point several parts at one channel or detach one from every channel -- so the two agree only
+    /// until something moves a part, and a bulk dump moves parts by definition.
+    ///
+    /// -1 when no engine reported one, which is what a cleared snapshot holds; a row falls back to
+    /// its slot rather than every part claiming channel 1. The module's "off" is 16, which is a
+    /// part detached from every channel and hearing nothing however much the file sends.
+    int rx_channel = -1;
 
     /// The tone map this part's program resolves against, as `ToneMap`. Per part and per moment:
     /// a bank LSB names a vintage and XG System On moves every part at once.
@@ -143,10 +163,35 @@ public:
     /// Silences everything and returns every part to its power-on state.
     void panic();
 
+    /// Stops every sounding note without disturbing anything else.
+    ///
+    /// All Sound Off (CC 120) on every part, which is the one message defined to silence a part
+    /// regardless of whether its sustain pedal is down, and which changes no controller value -- so
+    /// unlike `panic` the song can resume into exactly the state it left.
+    ///
+    /// This is what pausing needs. A paused transport still renders, so that a keyboard stays
+    /// playable, but the sequencer is not advancing: any note the song was holding would never
+    /// reach its note-off and would sound until the transport started again.
+    void silence();
+
     /// Renders the next block. Live notes sound over a running song, since one generator serves
     /// both. Fills with silence when there is no engine, rather than leaving the caller's buffer
     /// holding the previous block.
     void render(std::span<float> left, std::span<float> right);
+
+    /// Renders the generator alone, leaving the sequencer exactly where it is.
+    ///
+    /// This is what makes the instrument playable while the transport is stopped. `render` above
+    /// goes through the sequence player whenever a song is loaded, so using it would advance the
+    /// song: a keyboard could only be heard while a file was playing, and pressing a key would
+    /// start the file moving under it.
+    void render_live(std::span<float> left, std::span<float> right);
+
+    /// Voices sounding right now, including any still releasing.
+    ///
+    /// The render thread uses this to decide whether a stopped transport still has something to
+    /// render -- a held chord, or the tail of one -- rather than going to sleep on top of it.
+    [[nodiscard]] int active_voices() const noexcept;
 
     /// One channel voice message on a port -- live MIDI and the on-screen keyboard.
     void send_channel(int port, int status, int data1, int data2);
@@ -205,8 +250,12 @@ private:
     std::optional<smf::SongLoop> song_loop_;
     bool looping_ = false;
 
-    /// Which parts the loaded song addresses, as `port * 16 + channel`.
-    std::array<bool, TS_MAX_PARTS> used_parts_{};
+    /// Which *channel addresses* the loaded song sends on, as `port * 16 + channel`.
+    ///
+    /// Channels, not parts, and the distinction is the whole point: which part a channel reaches is
+    /// the engine's to answer and changes while the file plays, so this holds the half that is a
+    /// property of the file and `capture` asks the engine for the other half.
+    std::array<bool, TS_MAX_PARTS> used_channels_{};
 
     TSEngineSettings settings_ = TSEngineSettingsDefault();
     ChannelMask channels_;

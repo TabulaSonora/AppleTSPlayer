@@ -29,6 +29,7 @@ struct PreferencesTests {
         settings.chorus = false
         settings.delay = true
         settings.efx = false
+        settings.extendedInterpolation = false
         settings.outputGain = 1.75
 
         Preferences(defaults: defaults).store(settings)
@@ -79,5 +80,14 @@ struct PreferencesTests {
         #expect(settings.map == .sc88Pro)
         #expect(settings.polyphony == EngineSettings.default.polyphony)
         #expect(settings.reverb == EngineSettings.default.reverb)
+
+        // The setting added last, which is the one a domain written before it will be missing.
+        #expect(settings.extendedInterpolation == EngineSettings.default.extendedInterpolation)
+    }
+
+    /// The extended resampler is the one default that is not the module's own behaviour, so it is
+    /// worth pinning: a change upstream should be a decision here, not a surprise.
+    @Test func theExtendedResamplerIsOnByDefault() {
+        #expect(EngineSettings.default.extendedInterpolation)
     }
 }
