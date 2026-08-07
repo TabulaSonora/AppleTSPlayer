@@ -1,0 +1,50 @@
+{
+  "features" : [
+    "refractivity"
+  ],
+  "fill" : {
+    "linear-gradient" : [
+      "display-p3:0.99608,0.50196,0.00000,1.00000",
+      "srgb:0.48235,0.25490,0.72549,1.00000"
+    ]
+  },
+  "groups" : [
+    {
+      "blur-material" : null,
+      "layers" : [
+        {
+          "image-name" : "SVG image.svg",
+          "name" : "SVG image",
+          "position" : {
+            "scale" : 6.15,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
+        }
+      ],
+      "lighting" : "individual",
+      "refractivity" : {
+        "depth" : 1,
+        "enabled" : true,
+        "strength" : 0.033828125
+      },
+      "shadow" : {
+        "kind" : "layer-color",
+        "opacity" : 1.48
+      },
+      "specular" : true,
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.48
+      }
+    }
+  ],
+  "supported-platforms" : {
+    "circles" : [
+      "watchOS"
+    ],
+    "squares" : "shared"
+  }
+}

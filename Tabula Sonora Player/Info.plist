@@ -1,0 +1,253 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  Only the document types live here. Everything else in Info.plist is still generated:
+	  GENERATE_INFOPLIST_FILE stays on and merges its keys into this file, because
+	  CFBundleDocumentTypes and UTImportedTypeDeclarations are nested arrays and there is no
+	  INFOPLIST_KEY_ build setting that can express one.
+	-->
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>MIDI File</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>public.midi-audio</string>
+				<string>co.losno.tabula-sonora.rmi</string>
+			</array>
+		</dict>
+		<dict>
+			<!--
+			  The containers the engine converts to SMF on the way in. Nobody else on the system
+			  declares these, so this app is their owner in practice and ranks accordingly.
+			-->
+			<key>CFBundleTypeName</key>
+			<string>Legacy Music Sequence</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Default</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>co.losno.tabula-sonora.mids</string>
+				<string>co.losno.tabula-sonora.mus</string>
+				<string>co.losno.tabula-sonora.xmi</string>
+				<string>co.losno.tabula-sonora.gmf</string>
+				<string>co.losno.tabula-sonora.hmi</string>
+				<string>co.losno.tabula-sonora.hmp</string>
+				<string>co.losno.tabula-sonora.lds</string>
+				<string>co.losno.tabula-sonora.xmf</string>
+			</array>
+		</dict>
+		<dict>
+			<!--
+			  An extension-only claim, for files whose extension another installed app has already
+			  taken ownership of. LSItemContentTypes cannot reach those: LaunchServices resolves an
+			  extension to exactly one type, and if that type is somebody else's this app is not
+			  offered at all. CFBundleTypeExtensions is the older, type-independent spelling and is
+			  still honoured for exactly this case.
+			-->
+			<key>CFBundleTypeName</key>
+			<string>Legacy Music Sequence</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>CFBundleTypeExtensions</key>
+			<array>
+				<string>mus</string>
+				<string>lds</string>
+				<string>xmi</string>
+				<string>gmf</string>
+				<string>hmi</string>
+				<string>hmp</string>
+				<string>mids</string>
+				<string>rmi</string>
+				<string>xmf</string>
+				<string>mxmf</string>
+			</array>
+		</dict>
+	</array>
+
+	<!--
+	  Imported rather than exported: these are other people's formats. None of their owners ever
+	  declared a uniform type identifier, so the identifiers are namespaced here to avoid colliding
+	  with one that might appear later.
+
+	  All of them conform to public.data and not to public.midi-audio: only RMID actually holds a
+	  Standard MIDI File. MUS, XMI, LDS and the rest are their own sequence formats that the engine
+	  converts on the way in, and calling them MIDI would make every MIDI-aware app claim to read
+	  files it cannot.
+	-->
+	<key>UTImportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>co.losno.tabula-sonora.mus</string>
+			<key>UTTypeDescription</key>
+			<string>DOOM Music</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>mus</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>co.losno.tabula-sonora.lds</string>
+			<key>UTTypeDescription</key>
+			<string>Loudness Sound System Music</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>lds</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>co.losno.tabula-sonora.rmi</string>
+			<key>UTTypeDescription</key>
+			<string>RIFF MIDI File</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>rmi</string>
+					<string>rmid</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>co.losno.tabula-sonora.mids</string>
+			<key>UTTypeDescription</key>
+			<string>DirectMusic Sequence</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>mids</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>co.losno.tabula-sonora.xmi</string>
+			<key>UTTypeDescription</key>
+			<string>Miles Extended MIDI</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>xmi</string>
+					<string>xmid</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>co.losno.tabula-sonora.gmf</string>
+			<key>UTTypeDescription</key>
+			<string>GMF Sequence</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>gmf</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>co.losno.tabula-sonora.hmi</string>
+			<key>UTTypeDescription</key>
+			<string>Human Machine Interfaces Music</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>hmi</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>co.losno.tabula-sonora.hmp</string>
+			<key>UTTypeDescription</key>
+			<string>Human Machine Interfaces Music</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>hmp</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>co.losno.tabula-sonora.xmf</string>
+			<key>UTTypeDescription</key>
+			<string>Extensible Music Format</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>xmf</string>
+					<string>mxmf</string>
+				</array>
+			</dict>
+		</dict>
+	</array>
+
+	<!-- So the Files app hands over the original rather than a copy. -->
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
+</dict>
+</plist>

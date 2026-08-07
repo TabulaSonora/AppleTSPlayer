@@ -1,0 +1,22 @@
+# Xcode
+xcuserdata/
+*.xcuserstate
+DerivedData/
+build/
+
+# SwiftPM
+.build/
+.swiftpm/
+Packages/*/.build/
+Packages/*/.swiftpm/
+
+# macOS
+.DS_Store
+
+# Never commit the ROM, or anything derived from it. The engine reads a SCCore.dll the user
+# supplies from their own licensed SOUND Canvas VA install; nothing Roland-derived belongs here.
+*.dll
+*.wav
+
+# Duplicate of the icon source inside the app folder.
+/ts.icon/

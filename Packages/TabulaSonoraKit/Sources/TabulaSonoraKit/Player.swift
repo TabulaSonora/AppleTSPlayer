@@ -1,0 +1,315 @@
+import AVFoundation
+import Foundation
+import Observation
+import TabulaSonoraBridge
+
+/// The engine, its audio output and the state a UI draws from.
+///
+/// Everything here is main-actor. The engine's own state is never read directly: the render thread
+/// publishes a snapshot roughly every 20 ms and this polls a copy of it, which is what keeps the
+/// single-threaded synth single-threaded with a mixer attached.
+@MainActor
+@Observable
+public final class Player {
+    /// The engine's frame rate. Everything measured in frames is at this rate.
+    public static let sampleRate = TSEngine.sampleRate
+
+    /// The `SCCore.dll` build the engine requires, for an import screen to name.
+    public static let requiredROM = ROMIdentity.pinned
+
+    // MARK: State a view draws
+
+    public private(set) var romName: String?
+    public private(set) var songName: String?
+    public private(set) var isPlaying = false
+    public private(set) var isComplete = false
+
+    /// What is audible, in seconds -- which lags what has been rendered by the ring's lead.
+    public private(set) var position: TimeInterval = 0
+    public private(set) var duration: TimeInterval = 0
+
+    public private(set) var activeVoices = 0
+    public private(set) var voiceCapacity = 0
+    public private(set) var isXGMode = false
+
+    /// How many times the audio callback came up short. Never hide this from the user: a glitch
+    /// they hear but the display does not mention reads as a fault in the engine.
+    public private(set) var underruns: Int64 = 0
+    public private(set) var peakLeft: Float = 0
+    public private(set) var peakRight: Float = 0
+
+    /// As many parts as the engine has ports for. A mixer should show those marked `isPresent`.
+    public private(set) var parts: [PartState] = []
+
+    public private(set) var settings = EngineSettings.default
+
+    public var isLooping = false {
+        didSet {
+            engine.isLooping = isLooping
+            preferences.isLooping = isLooping
+        }
+    }
+
+    /// How far ahead of the device the engine renders, in milliseconds.
+    ///
+    /// This is the buffer: lower means a live keyboard answers sooner and a seek is heard sooner,
+    /// higher leaves more room for the render thread to be descheduled without the audio callback
+    /// coming up short. Watch `underruns` when lowering it -- that is the number this trades against.
+    ///
+    /// Takes effect at the next block and never reallocates, so it is safe to drag a slider against.
+    public var latencyMilliseconds: Int {
+        didSet {
+            engine.latencyMilliseconds = latencyMilliseconds
+            preferences.latencyMilliseconds = latencyMilliseconds
+        }
+    }
+
+    public static let latencyRange =
+        TSEngine.minimumLatencyMilliseconds...TSEngine.maximumLatencyMilliseconds
+
+    // MARK: Machinery
+
+    /// The engine crosses isolation boundaries deliberately, so live MIDI can reach it from
+    /// CoreMIDI's own thread and an export can run off the main actor.
+    ///
+    /// This is a claim about the bridge, not a suppression: `ts::apple::Player` serialises every
+    /// control operation behind a mutex, takes live MIDI through a separate inbox so a MIDI source
+    /// never waits on a block render, and routes mute and solo through `ChannelMask`, whose flags
+    /// are atomic for exactly this reason. The one thing that is *not* safe -- touching the
+    /// `ToneGenerator` from two threads -- is what the bridge exists to prevent.
+    private struct EngineBox: @unchecked Sendable {
+        let engine: TSEngine
+    }
+
+    @ObservationIgnored nonisolated private let box: EngineBox
+    @ObservationIgnored private let output: AudioOutput
+    @ObservationIgnored private var ticker: Task<Void, Never>?
+    @ObservationIgnored private var midiInput: MIDIInput?
+    @ObservationIgnored private let preferences: Preferences
+
+    nonisolated private var engine: TSEngine { box.engine }
+
+    public init(defaults: UserDefaults = .standard) {
+        let engine = TSEngine()
+        let preferences = Preferences(defaults: defaults)
+
+        self.box = EngineBox(engine: engine)
+        self.output = AudioOutput(ringHandle: engine.ringHandle)
+        self.preferences = preferences
+
+        // Restored before anything is loaded, which is also when it is free. The session keeps the
+        // settings it is handed even with no ROM open and builds the generator from them when one
+        // arrives, so restoring here costs no rebuild and resets nobody's parts.
+        let stored = preferences.settings
+        self.settings = stored
+        self.latencyMilliseconds = preferences.latencyMilliseconds ?? engine.latencyMilliseconds
+        self.isLooping = preferences.isLooping
+
+        engine.apply(stored.bridged)
+        engine.latencyMilliseconds = self.latencyMilliseconds
+        engine.isLooping = self.isLooping
+
+        observeAudioInterruptions()
+    }
+
+    // MARK: Loading
+
+    /// Opens a `SCCore.dll`.
+    ///
+    /// - Parameter verifyFully: hashes all 27 MB, which takes a moment. Do it once, when the file
+    ///   is first imported; a file already verified needs only its size and PE timestamp checked.
+    public func loadROM(at url: URL, verifyFully: Bool) throws {
+        try engine.loadROM(atPath: url.path(percentEncoded: false), verifyFully: verifyFully)
+        romName = engine.romName
+        try output.start()
+        startTicking()
+
+        // Only once there is a voice to play: an attached keyboard before the ROM would be sending
+        // notes into an engine that cannot sound them.
+        startMIDIInput()
+    }
+
+    public func loadSong(at url: URL) throws {
+        try engine.loadSong(atPath: url.path(percentEncoded: false))
+        songName = engine.songName
+        isComplete = false
+        try output.start()
+        startTicking()
+    }
+
+    public func unloadSong() {
+        pause()
+        engine.unloadSong()
+        songName = nil
+        isComplete = false
+    }
+
+    // MARK: Transport
+
+    public func play() {
+        guard romName != nil else { return }
+
+        // A finished song restarts rather than refusing: at the end, Play cannot mean anything else.
+        if isComplete {
+            engine.seek(toFrame: 0)
+            isComplete = false
+        }
+
+        engine.isPaused = false
+        isPlaying = true
+    }
+
+    public func pause() {
+        engine.isPaused = true
+        isPlaying = false
+    }
+
+    public func togglePlaying() {
+        isPlaying ? pause() : play()
+    }
+
+    public func seek(toSeconds seconds: TimeInterval) {
+        engine.seek(toFrame: Int64(max(0, seconds) * Self.sampleRate))
+        isComplete = false
+    }
+
+    /// Silences everything and returns every part to its power-on state.
+    public func panic() {
+        engine.panic()
+    }
+
+    // MARK: Mixer
+
+    public func setMuted(_ muted: Bool, forPart part: Int) {
+        engine.setMuted(muted, forPart: part)
+    }
+
+    public func setSoloed(_ soloed: Bool, forPart part: Int) {
+        engine.setSoloed(soloed, forPart: part)
+    }
+
+    public func resetChannels() {
+        engine.resetChannels()
+    }
+
+    // MARK: Engine settings
+
+    /// Rebuilds the generator if anything structural changed, carrying part state across it.
+    /// Gain alone is applied live.
+    public func apply(_ settings: EngineSettings) {
+        self.settings = settings
+        engine.apply(settings.bridged)
+        preferences.store(settings)
+    }
+
+    // MARK: Live MIDI
+
+    /// One channel voice message. Never blocks on a render, so it is safe from a MIDI callback.
+    public nonisolated func send(status: Int, data1: Int, data2: Int, port: Int = 0) {
+        engine.sendChannel(onPort: port, status: status, data1: data1, data2: data2)
+    }
+
+    /// Opens every attached MIDI source and plays it into the running engine.
+    ///
+    /// Live notes sound over a playing song, because one generator serves both -- the arrangement
+    /// the module itself has, where the front panel keeps working while a sequence runs.
+    public func startMIDIInput() {
+        guard midiInput == nil else { return }
+        let box = self.box
+        let input = MIDIInput { status, data1, data2 in
+            box.engine.sendChannel(onPort: 0, status: status, data1: data1, data2: data2)
+        }
+        input.start()
+        midiInput = input
+    }
+
+    // MARK: Export
+
+    /// Renders the loaded song to a WAV, off the main actor, while playback continues.
+    ///
+    /// Goes through the library's own writer over a second generator, so the result is the same
+    /// bytes a `tabula-sonora render` with these settings would produce -- not merely similar ones.
+    public func exportWAV(to url: URL,
+                          progress: @escaping @Sendable (Double) -> Bool) async throws {
+        let box = self.box
+        let path = url.path(percentEncoded: false)
+        try await Task.detached(priority: .userInitiated) {
+            try box.engine.exportWAV(toPath: path) { progress($0) }
+        }.value
+    }
+
+    // MARK: Snapshot polling
+
+    private func startTicking() {
+        guard ticker == nil else { return }
+        ticker = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let self else { return }
+                self.refresh()
+                // Ten times a second. The render thread publishes far more often; this is a display
+                // refresh, not a sampling of the engine.
+                try? await Task.sleep(for: .milliseconds(100))
+            }
+        }
+    }
+
+    private func refresh() {
+        let snapshot = engine.snapshot()
+
+        position = TimeInterval(snapshot.position) / Self.sampleRate
+        duration = TimeInterval(snapshot.length) / Self.sampleRate
+        activeVoices = snapshot.activeVoices
+        voiceCapacity = snapshot.voiceCapacity
+        isXGMode = snapshot.xgMode
+        underruns = snapshot.underruns
+        peakLeft = snapshot.peakLeft
+        peakRight = snapshot.peakRight
+        parts = snapshot.parts.map(PartState.init)
+
+        if snapshot.complete && !isComplete {
+            isComplete = true
+            pause()
+        }
+    }
+
+    // MARK: Interruptions
+
+    private func observeAudioInterruptions() {
+        #if os(iOS) || os(visionOS)
+        let center = NotificationCenter.default
+
+        center.addObserver(forName: AVAudioSession.interruptionNotification,
+                           object: nil, queue: .main) { [weak self] note in
+            guard let raw = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
+                  let type = AVAudioSession.InterruptionType(rawValue: raw) else { return }
+
+            let options = (note.userInfo?[AVAudioSessionInterruptionOptionKey] as? UInt)
+                .map(AVAudioSession.InterruptionOptions.init(rawValue:)) ?? []
+
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                switch type {
+                case .began:
+                    self.pause()
+                case .ended where options.contains(.shouldResume):
+                    try? self.output.restart()
+                    self.play()
+                default:
+                    break
+                }
+            }
+        }
+
+        center.addObserver(forName: AVAudioSession.routeChangeNotification,
+                           object: nil, queue: .main) { [weak self] note in
+            guard let raw = note.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt,
+                  let reason = AVAudioSession.RouteChangeReason(rawValue: raw) else { return }
+
+            // Headphones pulled out. Carrying on through the speaker is never what was wanted.
+            if reason == .oldDeviceUnavailable {
+                MainActor.assumeIsolated { self?.pause() }
+            }
+        }
+        #endif
+    }
+}
