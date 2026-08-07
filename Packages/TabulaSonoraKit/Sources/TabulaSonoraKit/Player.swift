@@ -86,6 +86,10 @@ public final class Player {
     @ObservationIgnored private var ticker: Task<Void, Never>?
     @ObservationIgnored private var midiInput: MIDIInput?
     @ObservationIgnored private let preferences: Preferences
+    @ObservationIgnored private var nowPlaying: NowPlaying?
+
+    /// Where the system was last told the transport was, so a jump can be told from ordinary drift.
+    @ObservationIgnored private var lastPublishedPosition: TimeInterval = 0
 
     nonisolated private var engine: TSEngine { box.engine }
 
@@ -110,6 +114,16 @@ public final class Player {
         engine.isLooping = self.isLooping
 
         observeAudioInterruptions()
+
+        nowPlaying = NowPlaying(commands: NowPlaying.Commands(
+            play: { [weak self] in self?.play() },
+            pause: { [weak self] in self?.pause() },
+            toggle: { [weak self] in self?.togglePlaying() },
+            seek: { [weak self] in self?.seek(toSeconds: $0) },
+            skip: { [weak self] offset in
+                guard let self else { return }
+                self.seek(toSeconds: self.position + offset)
+            }))
     }
 
     // MARK: Loading
@@ -135,6 +149,12 @@ public final class Player {
         isComplete = false
         try output.start()
         startTicking()
+
+        // The bridge publishes a snapshot before `loadSong` returns, so this picks up the song's
+        // length now rather than a tenth of a second later -- without it the system would be handed
+        // a zero duration and draw a scrubber that cannot be dragged.
+        refresh()
+        publishNowPlaying()
     }
 
     public func unloadSong() {
@@ -142,6 +162,7 @@ public final class Player {
         engine.unloadSong()
         songName = nil
         isComplete = false
+        nowPlaying?.clear()
     }
 
     // MARK: Transport
@@ -157,11 +178,13 @@ public final class Player {
 
         engine.isPaused = false
         isPlaying = true
+        publishNowPlaying()
     }
 
     public func pause() {
         engine.isPaused = true
         isPlaying = false
+        publishNowPlaying()
     }
 
     public func togglePlaying() {
@@ -171,6 +194,8 @@ public final class Player {
     public func seek(toSeconds seconds: TimeInterval) {
         engine.seek(toFrame: Int64(max(0, seconds) * Self.sampleRate))
         isComplete = false
+        position = max(0, min(seconds, duration))
+        publishNowPlaying()
     }
 
     /// Silences everything and returns every part to its power-on state.
@@ -200,6 +225,29 @@ public final class Player {
         self.settings = settings
         engine.apply(settings.bridged)
         preferences.store(settings)
+        publishNowPlaying()
+    }
+
+    /// Tells the system what is playing.
+    ///
+    /// Called where the state actually changes rather than from the ten-per-second refresh: the
+    /// elapsed time goes out with a playback rate beside it and the system extrapolates, so
+    /// republishing on a timer would keep resetting the very extrapolation it depends on.
+    private func publishNowPlaying() {
+        guard let songName else {
+            lastPublishedPosition = 0
+            nowPlaying?.clear()
+            return
+        }
+
+        lastPublishedPosition = position
+
+        nowPlaying?.update(
+            title: (songName as NSString).deletingPathExtension,
+            module: settings.map.name,
+            duration: duration,
+            position: position,
+            isPlaying: isPlaying)
     }
 
     // MARK: Live MIDI
@@ -266,9 +314,16 @@ public final class Player {
         peakRight = snapshot.peakRight
         parts = snapshot.parts.map(PartState.init)
 
+        // A song that wraps at its loop points moves the position backwards, and the system has no
+        // way to know: it is extrapolating forwards from the last thing it was told. Anything that
+        // is not the steady forward creep of playback gets republished.
+        if isPlaying, position < lastPublishedPosition - 1 {
+            publishNowPlaying()
+        }
+
         if snapshot.complete && !isComplete {
             isComplete = true
-            pause()
+            pause()   // publishes
         }
     }
 

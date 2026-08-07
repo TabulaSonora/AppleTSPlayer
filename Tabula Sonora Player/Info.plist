@@ -249,5 +249,15 @@
 	<!-- So the Files app hands over the original rather than a copy. -->
 	<key>LSSupportsOpeningDocumentsInPlace</key>
 	<true/>
+
+	<!--
+	  iOS only, and ignored elsewhere. Without it playback stops the moment the app leaves the
+	  screen, which also means the lock screen transport never appears: there would be nothing left
+	  playing for it to control.
+	-->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+	</array>
 </dict>
 </plist>
