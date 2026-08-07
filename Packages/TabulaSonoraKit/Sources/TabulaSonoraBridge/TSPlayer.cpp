@@ -1,5 +1,6 @@
 #include "TSPlayer.hpp"
 
+#include <os/workgroup.h>
 #include <pthread.h>
 
 #include <algorithm>
@@ -40,6 +41,10 @@ Player::~Player()
     quit_.store(true, std::memory_order_relaxed);
     if (renderer_.joinable()) {
         renderer_.join();
+    }
+    if (wanted_workgroup_ != nullptr) {
+        os_release(wanted_workgroup_);
+        wanted_workgroup_ = nullptr;
     }
 }
 
@@ -109,6 +114,18 @@ void Player::set_paused(bool paused)
         ring_.set_starvation_expected(true);
     }
     paused_.store(paused, std::memory_order_relaxed);
+}
+
+void Player::set_workgroup(void* workgroup) noexcept
+{
+    const std::lock_guard<std::mutex> guard{lock_};
+    if (wanted_workgroup_ == workgroup) {
+        return;
+    }
+    if (wanted_workgroup_ != nullptr) {
+        os_release(wanted_workgroup_);
+    }
+    wanted_workgroup_ = workgroup != nullptr ? os_retain(workgroup) : nullptr;
 }
 
 void Player::set_latency_ms(int milliseconds) noexcept
@@ -201,10 +218,24 @@ void Player::run()
 {
     pthread_setname_np("co.losno.tabula-sonora.render");
 
-    // High, but deliberately not real-time: this thread renders whole blocks and may take a lock,
-    // which is precisely what a real-time thread must not do. The audio callback below it is the
-    // one with the hard deadline, and the ring is what buys it that freedom.
-    pthread_set_qos_class_self_np(QOS_CLASS_USER_INITIATED, 0);
+    // Deliberately not a real-time thread: this one renders whole blocks and takes a lock, which is
+    // precisely what a real-time thread must not do. The callback below it has the hard deadline,
+    // and the ring is what buys this thread the freedom to miss one.
+    //
+    // But a QoS class alone only says "this is important", and the system is free to disagree once
+    // it decides nothing is urgent -- which is exactly what an iOS device does when its screen goes
+    // off. The workgroup joined below is the part that says "this thread feeds that deadline", and
+    // it is what actually keeps it scheduled. The class is the floor under it.
+    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+
+    // The workgroup this thread is currently in, and the token needed to leave it. Owned by this
+    // thread alone: joining and leaving are both thread-local operations.
+    os_workgroup_t joined = nullptr;
+    os_workgroup_join_token_s join_token{};
+
+    // What the callback has been asking for, decayed so the lead follows the device down again
+    // after it has been up. Frames, at the engine's rate.
+    int callback_frames = 0;
 
     std::vector<float> left(block_frames, 0.0F);
     std::vector<float> right(block_frames, 0.0F);
@@ -248,7 +279,30 @@ void Player::run()
             const bool idle = paused_.load(std::memory_order_relaxed) || !session_.has_rom()
                               || session_.complete();
 
-            const auto lead = static_cast<std::size_t>(lead_frames_.load(std::memory_order_relaxed));
+            if (wanted_workgroup_ != static_cast<void*>(joined)) {
+                if (joined != nullptr) {
+                    os_workgroup_leave(joined, &join_token);
+                    os_release(joined);
+                    joined = nullptr;
+                }
+                auto* wanted = static_cast<os_workgroup_t>(wanted_workgroup_);
+                if (wanted != nullptr && os_workgroup_join(wanted, &join_token) == 0) {
+                    joined = static_cast<os_workgroup_t>(os_retain(wanted));
+                }
+            }
+
+            // A device block is not ours to choose and does not stay put: iOS enlarges it when the
+            // screen sleeps, and a lead shorter than one block can never satisfy a single callback
+            // -- every one of them would come up short no matter how fast the engine renders. So
+            // the floor follows what the callback actually asks for, and the setting is a floor of
+            // its own rather than a ceiling.
+            const auto request = static_cast<int>(handle_.last_request.load(std::memory_order_relaxed));
+            callback_frames = std::max(request, callback_frames - (callback_frames / 16) - 1);
+
+            const auto configured = lead_frames_.load(std::memory_order_relaxed);
+            const auto lead = static_cast<std::size_t>(
+                std::min(std::max(configured, 3 * callback_frames),
+                         static_cast<int>(ring_.capacity() - block_frames)));
 
             if (idle) {
                 // Re-armed every iteration while idle, not once on the way in. Pausing leaves a
@@ -300,6 +354,11 @@ void Player::run()
         if (nap.count() > 0) {
             std::this_thread::sleep_for(nap);
         }
+    }
+
+    if (joined != nullptr) {
+        os_workgroup_leave(joined, &join_token);
+        os_release(joined);
     }
 }
 

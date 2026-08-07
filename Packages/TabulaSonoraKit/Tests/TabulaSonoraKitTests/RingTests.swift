@@ -94,6 +94,29 @@ struct RingTests {
         engine.isPaused = true
     }
 
+    /// A device block bigger than the configured buffer must not starve the callback.
+    ///
+    /// This is what an iOS device does when its screen goes off: it enlarges its I/O block to save
+    /// power. A lead shorter than one block can never satisfy a single callback however fast the
+    /// engine renders, so the producer has to follow the consumer up rather than hold the setting.
+    @Test(.enabled(if: romPath != nil && midiPath != nil))
+    func aBlockLargerThanTheBufferStillKeepsUp() throws {
+        let engine = TSEngine()
+        engine.latencyMilliseconds = TSEngine.minimumLatencyMilliseconds  // 10 ms = 320 frames
+        try engine.loadROM(atPath: Self.romPath!, verifyFully: false)
+        try engine.loadSong(atPath: Self.midiPath!)
+        engine.isPaused = false
+
+        // 4096 frames is 128 ms at the engine's rate -- an order of magnitude past the setting.
+        let peak = drain(engine, blocks: 20, frames: 4096)
+
+        #expect(peak > 0.001, "nothing reached the ring at a 128 ms block")
+        let dropouts = engine.snapshot().underruns
+        #expect(dropouts == 0, "a block larger than the buffer starved the callback: \(dropouts)")
+
+        engine.isPaused = true
+    }
+
     /// The lowest buffer the engine offers has to actually work, or offering it is a trap.
     @Test(.enabled(if: romPath != nil && midiPath != nil))
     func theSmallestBufferStillKeepsUp() throws {

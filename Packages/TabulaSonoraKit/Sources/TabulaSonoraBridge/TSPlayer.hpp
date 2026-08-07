@@ -60,8 +60,35 @@ public:
     Player(Player&&) = delete;
     Player& operator=(Player&&) = delete;
 
-    /// The ring the audio callback reads. Stable for the life of the player.
+    /// What the audio callback is handed: the ring, and somewhere to report how much it asked
+    /// for. The size of a device block is not ours to choose and does not stay put -- iOS enlarges
+    /// it when the screen sleeps -- so the producer learns it from the consumer rather than
+    /// guessing.
+    struct RingHandle {
+        FrameRing* ring;
+        /// Frames the callback last asked for. Written by the callback, read by the render thread.
+        std::atomic<std::uint32_t> last_request{0};
+    };
+
+    /// Stable for the life of the player.
+    [[nodiscard]] RingHandle& handle() noexcept { return handle_; }
     [[nodiscard]] FrameRing& ring() noexcept { return ring_; }
+
+    /// Joins the render thread to the audio device's workgroup.
+    ///
+    /// Without this the thread is scheduled as an ordinary high-priority thread, and the moment the
+    /// system decides nothing is urgent -- an iOS device with its screen off -- it stops being
+    /// scheduled in time to keep the ring fed, while the callback goes on running to its deadline.
+    /// Joining is what tells the scheduler this thread has that same deadline.
+    ///
+    /// Safe to call repeatedly; the thread joins at its next block and leaves whatever it was in.
+    /// Pass nullptr when the device goes away.
+    ///
+    /// Takes `void*` rather than `os_workgroup_t` on purpose. Under ARC that type is an
+    /// Objective-C object and in plain C++ it is a struct pointer, so a header shared by a .mm and
+    /// a .cpp would declare two different functions and the link would fail. The cast happens on
+    /// each side, where the type is unambiguous.
+    void set_workgroup(void* workgroup) noexcept;
 
     // -- Control. Safe from any one controlling thread; these may block briefly and may throw. --
 
@@ -138,6 +165,12 @@ private:
 
     /// Frames the producer keeps queued. Read every block by the render thread, set from anywhere.
     std::atomic<int> lead_frames_{default_latency_ms * Session::sample_rate / 1000};
+
+    RingHandle handle_{&ring_, {}};
+
+    /// The workgroup the render thread should be in, guarded by `lock_` and retained while stored.
+    /// An `os_workgroup_t`, held as `void*` for the reason given on `set_workgroup`.
+    void* wanted_workgroup_ = nullptr;
 
     /// What is *audible*: the session's position less what is still queued in the ring.
     std::atomic<std::int64_t> audible_{0};

@@ -297,14 +297,26 @@ void fill_error(NSError **error, TSEngineError code, const std::string &message)
 
 - (void *)ringHandle
 {
-    return &_player->ring();
+    return &_player->handle();
+}
+
+- (void)adoptWorkgroupFromAudioUnit:(AUAudioUnit *)audioUnit
+{
+    // __bridge, not a transfer: the player retains it itself for as long as it holds it.
+    _player->set_workgroup((__bridge void *)audioUnit.osWorkgroup);
 }
 
 @end
 
 uint32_t TSEngineRingRead(void *ringHandle, float *left, float *right, uint32_t frames)
 {
-    auto *ring = static_cast<ts::FrameRing *>(ringHandle);
+    auto *handle = static_cast<ts::apple::Player::RingHandle *>(ringHandle);
+    auto *ring = handle->ring;
+
+    // What the device is asking for, reported so the producer can keep a lead that covers it. A
+    // block larger than the lead can never be satisfied however fast the engine renders, and iOS
+    // enlarges its block when the screen sleeps.
+    handle->last_request.store(frames, std::memory_order_relaxed);
 
     // Interleaved in the ring, planar out: `AVAudioSourceNode` is connected in the engine's own
     // standard (non-interleaved) format, so the split happens here rather than costing a converter.

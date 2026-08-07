@@ -44,6 +44,15 @@ final class AudioOutput {
         engine.connect(sourceNode, to: engine.mainMixerNode, format: format)
     }
 
+    /// The output unit driving the device.
+    ///
+    /// Handed to the bridge so the render thread can join the device's workgroup. Its `osWorkgroup`
+    /// is deliberately unavailable from Swift, so only the Objective-C++ side can read it.
+    var outputAudioUnit: AUAudioUnit { engine.outputNode.auAudioUnit }
+
+    /// Whether the graph is running, so a caller knows if a workgroup can be read from it yet.
+    var isRunning: Bool { engine.isRunning }
+
     func start() throws {
         try configureSession()
         guard !engine.isRunning else { return }

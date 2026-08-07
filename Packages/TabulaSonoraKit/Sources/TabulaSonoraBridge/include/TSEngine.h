@@ -1,3 +1,4 @@
+#import <AudioToolbox/AudioToolbox.h>
 #import <Foundation/Foundation.h>
 
 #import "TSTypes.h"
@@ -169,6 +170,19 @@ typedef NS_ERROR_ENUM(TSEngineErrorDomain, TSEngineError) {
 
 /// The ring the audio callback reads. Pass to `TSEngineRingRead`; valid for this engine's lifetime.
 @property (nonatomic, readonly) void *ringHandle NS_RETURNS_INNER_POINTER;
+
+/// Joins the render thread to the audio device's workgroup.
+///
+/// Pass the output node's `auAudioUnit`. Its `osWorkgroup` is unavailable from Swift on purpose --
+/// the API is for real-time threads and the Swift runtime is not safe on one -- so the reading
+/// happens here.
+///
+/// Without this the render thread is merely a high-priority thread, and a device that has decided
+/// nothing is urgent (an iPhone with its screen off) stops scheduling it in time to keep the ring
+/// fed while the callback goes on running to its deadline. That is heard as dropouts.
+///
+/// Call after the engine starts, and again after anything restarts it. Pass nil when it stops.
+- (void)adoptWorkgroupFromAudioUnit:(nullable AUAudioUnit *)audioUnit;
 
 @end
 

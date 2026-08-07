@@ -135,7 +135,7 @@ public final class Player {
     public func loadROM(at url: URL, verifyFully: Bool) throws {
         try engine.loadROM(atPath: url.path(percentEncoded: false), verifyFully: verifyFully)
         romName = engine.romName
-        try output.start()
+        try startOutput()
         startTicking()
 
         // Only once there is a voice to play: an attached keyboard before the ROM would be sending
@@ -147,7 +147,7 @@ public final class Player {
         try engine.loadSong(atPath: url.path(percentEncoded: false))
         songName = engine.songName
         isComplete = false
-        try output.start()
+        try startOutput()
         startTicking()
 
         // The bridge publishes a snapshot before `loadSong` returns, so this picks up the song's
@@ -163,6 +163,20 @@ public final class Player {
         songName = nil
         isComplete = false
         nowPlaying?.clear()
+    }
+
+    /// Starts the audio graph and hands its workgroup to the render thread.
+    ///
+    /// The two belong together. A device only has a workgroup once its hardware is running, and it
+    /// is a different one after a restart -- so every path that starts the graph has to re-adopt,
+    /// or the render thread stays joined to a workgroup that no longer drives anything.
+    private func startOutput(restarting: Bool = false) throws {
+        if restarting {
+            try output.restart()
+        } else {
+            try output.start()
+        }
+        engine.adoptWorkgroup(from: output.outputAudioUnit)
     }
 
     // MARK: Transport
@@ -347,7 +361,7 @@ public final class Player {
                 case .began:
                     self.pause()
                 case .ended where options.contains(.shouldResume):
-                    try? self.output.restart()
+                    try? self.startOutput(restarting: true)
                     self.play()
                 default:
                     break
