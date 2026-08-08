@@ -40,17 +40,27 @@ struct MixerView: View {
         ScrollView {
             LazyVStack(spacing: 0) {
                 ForEach(visible) { part in
-                    PartRow(part: part, dimmed: anySoloed && !part.isSoloed)
-                    Divider()
+                    // Grouped with its rule so a part that leaves takes its divider with it rather
+                    // than leaving a double line behind for the length of the animation.
+                    VStack(spacing: 0) {
+                        PartRow(part: part, dimmed: anySoloed && !part.isSoloed)
+                        Divider()
+                    }
                 }
             }
+            // Keyed on the identities rather than on `visible` itself: the array is republished at
+            // 10 Hz with new voice counts, and animating that would restart the row animation every
+            // tenth of a second. What is worth animating is a part arriving, leaving or moving.
+            .animation(.default, value: visible.map(\.id))
         }
         .overlay {
             if visible.isEmpty {
                 ContentUnavailableView("No parts", systemImage: "slider.vertical.3",
                                        description: Text("Open a MIDI file to see its channels."))
+                    .transition(.opacity)
             }
         }
+        .animation(.default, value: visible.isEmpty)
     }
 }
 
@@ -61,19 +71,26 @@ private struct PartRow: View {
     let dimmed: Bool
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
             Text(part.label)
                 .font(.caption.monospacedDigit().weight(.medium))
                 .foregroundStyle(.secondary)
-                .frame(width: 34, alignment: .leading)
+                .frame(width: 30, alignment: .leading)
                 .help(part.address)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(part.name.isEmpty ? "—" : part.name)
-                    .font(.callout)
-                    .lineLimit(1)
+            // The tags sit beside the name rather than under it. They are three or four characters
+            // each and the name is one line, so stacking them spent a whole row's height on a
+            // quarter of a row's content -- and a mixer is read down the column, where every row
+            // saved is another part on screen.
+            VStack(alignment: .leading, spacing: 1) {
+                HStack(spacing: 5) {
+                    Text(part.name.isEmpty ? "—" : part.name)
+                        .font(.callout)
+                        .lineLimit(1)
+                        // A program change swaps the whole string; crossfading it reads as the part
+                        // changing instrument rather than as the row being rebuilt.
+                        .contentTransition(.opacity)
 
-                HStack(spacing: 6) {
                     if part.isDrums {
                         Tag(text: part.kit.map { "Kit \($0)" } ?? "Drums", tint: .orange)
                     }
@@ -81,6 +98,12 @@ private struct PartRow: View {
                     // every part at once, so one label for the whole mixer would go stale mid-song.
                     Tag(text: part.map.name, tint: .secondary)
                 }
+                // Both tags can appear or change mid-song -- GS reroutes drums over SysEx and XG
+                // System On moves every map at once -- so neither is a fixture of the row.
+                .animation(.default, value: part.isDrums)
+                .animation(.default, value: part.kit)
+                .animation(.default, value: part.map)
+                .animation(.default, value: part.name)
 
                 // A tooltip needs a pointer to sit under, so off the Mac the numbers behind the
                 // name have to be on the row itself -- the help below is there, and is unreachable.
@@ -89,6 +112,8 @@ private struct PartRow: View {
                     .font(.caption2.monospacedDigit())
                     .foregroundStyle(.tertiary)
                     .lineLimit(1)
+                    .contentTransition(.opacity)
+                    .animation(.default, value: part.numbers)
                 #endif
             }
             // The strip has room for a name and an abbreviation; the numbers behind them go here.
@@ -113,9 +138,15 @@ private struct PartRow: View {
                 .help("Solo \(part.label) — once anything is soloed, only soloed parts are heard")
         }
         .font(.caption)
+        // Small rather than the default: two buttons set the row's height on their own, and at the
+        // regular size they were taller than the line of text they sit beside.
+        .controlSize(.small)
         .padding(.horizontal, 20)
-        .padding(.vertical, 8)
+        .padding(.vertical, 5)
         .opacity(dimmed ? 0.45 : 1)
+        // Soloing dims every other row at once. Stepped without an animation it reads as a redraw;
+        // faded, it reads as the rest of the mixer standing back.
+        .animation(.easeInOut(duration: 0.18), value: dimmed)
     }
 }
 
@@ -127,9 +158,13 @@ private struct VoiceMeter: View {
             ForEach(0..<6, id: \.self) { slot in
                 RoundedRectangle(cornerRadius: 1)
                     .fill(slot < voices ? Color.accentColor : Color.secondary.opacity(0.18))
-                    .frame(width: 3, height: 12)
+                    .frame(width: 3, height: 10)
             }
         }
+        // The count is polled at 10 Hz, so a segment that lit and cleared between two ticks would
+        // otherwise be a single frame of colour. Easing out over rather less than the poll interval
+        // keeps it visible without smearing one note's worth of activity into the next.
+        .animation(.easeOut(duration: 0.08), value: voices)
         .help("\(voices) voice\(voices == 1 ? "" : "s") sounding")
     }
 }
@@ -145,5 +180,10 @@ private struct Tag: View {
             .padding(.horizontal, 4)
             .padding(.vertical, 1)
             .background(tint.opacity(0.12), in: .rect(cornerRadius: 3))
+            // Kit numbers change under the same tag rather than replacing it, so the text crossfades
+            // while the pill stays put; the pill itself grows out of the row when the drum tag first
+            // appears, which is the moment worth noticing.
+            .contentTransition(.opacity)
+            .transition(.scale(scale: 0.8).combined(with: .opacity))
     }
 }
