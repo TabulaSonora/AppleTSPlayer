@@ -12,7 +12,6 @@ to SMF on the way in.
 - Engine settings: vintage (SC-55 / 88 / 88Pro / 8820 / XG), 16/32/64 parts, polyphony, the four
   effect buses, output gain, and an adjustable buffer
 - WAV export, rendered through the library's own writer so the bytes match `tabula-sonora render`
-- Live CoreMIDI input, sounding over a playing song
 
 ## You need to supply the ROM
 

@@ -69,8 +69,8 @@ public final class Player {
 
     // MARK: Machinery
 
-    /// The engine crosses isolation boundaries deliberately, so live MIDI can reach it from
-    /// CoreMIDI's own thread and an export can run off the main actor.
+    /// The engine crosses isolation boundaries deliberately, so live MIDI can reach it from a
+    /// source's own thread and an export can run off the main actor.
     ///
     /// This is a claim about the bridge, not a suppression: `ts::apple::Player` serialises every
     /// control operation behind a mutex, takes live MIDI through a separate inbox so a MIDI source
@@ -84,7 +84,6 @@ public final class Player {
     @ObservationIgnored nonisolated private let box: EngineBox
     @ObservationIgnored private let output: AudioOutput
     @ObservationIgnored private var ticker: Task<Void, Never>?
-    @ObservationIgnored private var midiInput: MIDIInput?
     @ObservationIgnored private let preferences: Preferences
     @ObservationIgnored private var nowPlaying: NowPlaying?
 
@@ -137,10 +136,6 @@ public final class Player {
         romName = engine.romName
         try startOutput()
         startTicking()
-
-        // Only once there is a voice to play: an attached keyboard before the ROM would be sending
-        // notes into an engine that cannot sound them.
-        startMIDIInput()
     }
 
     public func loadSong(at url: URL) throws {
@@ -266,23 +261,16 @@ public final class Player {
 
     // MARK: Live MIDI
 
-    /// One channel voice message. Never blocks on a render, so it is safe from a MIDI callback.
+    /// One channel voice message, sounding over a playing song because one generator serves both --
+    /// the arrangement the module itself has, where the front panel keeps working while a sequence
+    /// runs.
+    ///
+    /// Nothing in the app calls this yet: the CoreMIDI source that did was taken out and is coming
+    /// back. It stays `nonisolated` for that return -- the bridge takes live messages through an
+    /// inbox the render thread drains at its next block, so this never blocks on a render and is
+    /// safe to call from a MIDI callback's own thread.
     public nonisolated func send(status: Int, data1: Int, data2: Int, port: Int = 0) {
         engine.sendChannel(onPort: port, status: status, data1: data1, data2: data2)
-    }
-
-    /// Opens every attached MIDI source and plays it into the running engine.
-    ///
-    /// Live notes sound over a playing song, because one generator serves both -- the arrangement
-    /// the module itself has, where the front panel keeps working while a sequence runs.
-    public func startMIDIInput() {
-        guard midiInput == nil else { return }
-        let box = self.box
-        let input = MIDIInput { status, data1, data2 in
-            box.engine.sendChannel(onPort: 0, status: status, data1: data1, data2: data2)
-        }
-        input.start()
-        midiInput = input
     }
 
     // MARK: Export
