@@ -6,6 +6,13 @@
 import os
 import SwiftUI
 import TabulaSonoraKit
+import UniformTypeIdentifiers
+
+#if os(macOS)
+import AppKit
+#else
+import UIKit
+#endif
 
 struct TransportView: View {
     @Environment(Player.self) private var player
@@ -17,6 +24,12 @@ struct TransportView: View {
     /// engine's own reports for the duration of the gesture.
     @State private var scrubbing: TimeInterval?
     @State private var export: ExportState?
+
+    #if !os(macOS)
+    /// A finished render waiting to be handed somewhere, which is the only moment there is a file
+    /// to hand over: a share sheet cannot offer what has not been written yet.
+    @State private var rendered: RenderedFile?
+    #endif
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -49,6 +62,16 @@ struct TransportView: View {
             status
         }
         .padding(20)
+        #if !os(macOS)
+        .sheet(item: $rendered) { file in
+            ShareSheet(url: file.url) {
+                // Whoever took it has its own copy by now, so the temporary is this app's to clear
+                // -- and it is the whole song, which is not a thing to leave lying in a container.
+                try? FileManager.default.removeItem(at: file.url)
+                rendered = nil
+            }
+        }
+        #endif
     }
 
     private var header: some View {
@@ -158,10 +181,25 @@ struct TransportView: View {
         return String(format: "%d:%02d", whole / 60, whole % 60)
     }
 
+    /// Renders the song to a WAV, asking about the destination at the only moment each platform
+    /// can be asked.
+    ///
+    /// The two orderings are not a preference. A save panel wants to come first, so the engine
+    /// writes the file once, straight where it is going -- a song is tens of megabytes and copying
+    /// it out of a temporary afterwards would be a second pass over all of it. A share sheet cannot
+    /// come first: there is nothing to offer until the render has produced a file.
+    ///
+    /// Cancelling is safe either way. `run_export` renders the whole song before it writes a byte,
+    /// so an abandoned export never leaves a truncated WAV behind -- least of all in a folder the
+    /// person chose themselves.
     private func beginExport() {
         let name = (player.songName as NSString?)?.deletingPathExtension ?? "Export"
-        let destination = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-            .appending(path: "\(name).wav")
+
+        #if os(macOS)
+        guard let destination = chooseDestination(named: name) else { return }
+        #else
+        let destination = URL.temporaryDirectory.appending(path: "\(name).wav")
+        #endif
 
         let state = ExportState(destination: destination)
         export = state
@@ -173,16 +211,35 @@ struct TransportView: View {
                     return !state.isCancelled
                 }
                 export = nil
-                if !state.isCancelled {
-                    failure = Failure(title: "Exported",
-                                      message: "Written to \(destination.path(percentEncoded: false))")
-                }
+                guard !state.isCancelled else { return }
+
+                #if os(macOS)
+                failure = Failure(title: "Exported",
+                                  message: "Written to \(destination.path(percentEncoded: false))")
+                #else
+                rendered = RenderedFile(url: destination)
+                #endif
             } catch {
                 export = nil
                 failure = Failure(title: "Export failed", message: error.localizedDescription)
             }
         }
     }
+
+    #if os(macOS)
+    /// The save panel, run before any rendering starts. Nil when it is dismissed, which is a
+    /// perfectly ordinary answer and not a failure worth reporting.
+    private func chooseDestination(named name: String) -> URL? {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.wav]
+        panel.nameFieldStringValue = "\(name).wav"
+        panel.canCreateDirectories = true
+        panel.title = "Export WAV"
+        panel.message = "Render the whole song at the current engine settings."
+
+        return panel.runModal() == .OK ? panel.url : nil
+    }
+    #endif
 }
 
 /// One running export, so the button can show progress and take a cancel.
@@ -210,3 +267,35 @@ final class ExportState {
         cancelled.withLock { $0 = true }
     }
 }
+
+#if !os(macOS)
+/// A rendered WAV waiting for somewhere to go. Identifiable so a sheet can be driven off it.
+private struct RenderedFile: Identifiable {
+    let id = UUID()
+    let url: URL
+}
+
+/// The system share sheet over a finished export -- AirDrop, Messages, and Save to Files, which is
+/// the save dialog the Mac gets by another door.
+///
+/// Presented as the sheet's own content rather than anchored to the button: inside a sheet UIKit
+/// gives it a presentation context on every size, which spares the popover source rect an iPad
+/// otherwise insists on.
+private struct ShareSheet: UIViewControllerRepresentable {
+    let url: URL
+
+    /// Called once the sheet is done with the file, whether something took it or the person
+    /// dismissed it. Waiting for this rather than for the dismissal is what stops an AirDrop still
+    /// in flight from having the file deleted out from under it.
+    let onFinish: () -> Void
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        let controller = UIActivityViewController(activityItems: [url],
+                                                  applicationActivities: nil)
+        controller.completionWithItemsHandler = { _, _, _, _ in onFinish() }
+        return controller
+    }
+
+    func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
+}
+#endif

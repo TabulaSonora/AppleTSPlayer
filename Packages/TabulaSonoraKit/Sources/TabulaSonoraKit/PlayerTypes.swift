@@ -192,6 +192,27 @@ public struct PartState: Identifiable, Equatable, Sendable {
         return detail
     }
 
+    /// `detail` at the width a strip can actually spare.
+    ///
+    /// Where there is no pointer there is no tooltip, so `detail` is unreachable and the numbers it
+    /// carries have to be on the row itself or nowhere. This is the same information at a third of
+    /// the width: one convention for the program rather than both, named so which one is meant is
+    /// still not a guess, and the bank pair colon-separated the way a patch chart prints it.
+    ///
+    /// The kit is left out where `detail` names it -- a drum part already carries it as a tag, and
+    /// the row has no room to say it twice.
+    public var numbers: String {
+        var numbers = "Patch \(program + 1) · Bank \(bank):\(bankLSB)"
+
+        // The one thing that cannot be dropped for width: under XG the part is sounding out of a
+        // bank it was never sent, so the pair above is not what the lookup was given.
+        if !isDrums, lookupBank != bank {
+            numbers += "→\(lookupBank)"
+        }
+
+        return numbers
+    }
+
     init(_ state: TSPartState) {
         index = state.index
         program = state.program

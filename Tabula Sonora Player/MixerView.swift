@@ -81,6 +81,15 @@ private struct PartRow: View {
                     // every part at once, so one label for the whole mixer would go stale mid-song.
                     Tag(text: part.map.name, tint: .secondary)
                 }
+
+                // A tooltip needs a pointer to sit under, so off the Mac the numbers behind the
+                // name have to be on the row itself -- the help below is there, and is unreachable.
+                #if !os(macOS)
+                Text(part.numbers)
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+                #endif
             }
             // The strip has room for a name and an abbreviation; the numbers behind them go here.
             .help(part.detail)

@@ -99,6 +99,10 @@ struct PartLabelTests {
         #expect(part.lookupBank == 125)
         #expect(part.lookupBank != part.bank, "XG resolves against a different bank")
         #expect(part.detail.contains("resolves against bank 125"))
+
+        // The compact form drops the kit and one of the two program conventions to fit a row, but
+        // never this: it is the whole difference between what was sent and what is sounding.
+        #expect(part.numbers.contains("Bank 64:0→125"))
     }
 
     /// The numbers behind the name, which is what the strip has no room to spell out.
@@ -114,6 +118,10 @@ struct PartLabelTests {
         // Counted from one as every patch chart counts them, with the wire value beside it.
         #expect(part.detail.contains("Program 1 (PC 0)"))
         #expect(part.detail.contains("Bank MSB 0, LSB 0"))
+
+        // And the form a row without a tooltip shows: the same two numbers, one convention each,
+        // still labelled so neither is a guess.
+        #expect(part.numbers == "Patch 1 · Bank 0:0")
     }
 
     /// A strip is listed if the file reaches the part, which is a question about the channel the
