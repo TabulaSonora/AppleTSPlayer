@@ -80,7 +80,11 @@ struct TransportView: View {
                 .font(.headline)
                 .lineLimit(1)
 
-            Text(player.romName.map { "Sound Canvas voice · \($0)" } ?? "")
+            // Localised here rather than by `Text`, because the whole expression would otherwise
+            // infer `LocalizedStringKey` and put the empty fallback in the catalogue as a key of
+            // its own. The empty line itself stays: it holds the header's height steady, so
+            // naming a ROM does not shift the song title up.
+            Text(verbatim: player.romName.map { String(localized: "Sound Canvas voice · \($0)") } ?? "")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -166,7 +170,7 @@ struct TransportView: View {
             // A glitch the listener hears but the display never mentions reads as a fault in the
             // engine, so this is shown rather than hidden.
             if player.underruns > 0 {
-                Label("\(player.underruns) dropout\(player.underruns == 1 ? "" : "s")",
+                Label("\(player.underruns) dropouts",
                       systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.orange)
             }

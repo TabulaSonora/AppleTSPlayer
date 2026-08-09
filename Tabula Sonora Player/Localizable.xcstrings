@@ -1,40 +1,55 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
-    "" : {
-      "localizations" : {
-        "es-CL" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : ""
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : ""
-          }
-        }
-      }
-    },
-    "%lld dropout%@" : {
+    "%lld dropouts" : {
+      "comment" : "A label showing how many audio dropouts (buffer underruns) have occurred.",
       "localizations" : {
         "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$lld dropout%2$@"
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld dropout"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld dropouts"
+                }
+              }
+            }
           }
         },
         "es-CL" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "%1$lld corte%2$@"
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "%lld corte"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "%lld cortes"
+                }
+              }
+            }
           }
         },
         "ja" : {
-          "stringUnit" : {
-            "state" : "machine_translated",
-            "value" : "ドロップアウト%1$lld件"
+          "variations" : {
+            "plural" : {
+              "other" : {
+                "stringUnit" : {
+                  "state" : "machine_translated",
+                  "value" : "ドロップアウト%lld件"
+                }
+              }
+            }
           }
         }
       }

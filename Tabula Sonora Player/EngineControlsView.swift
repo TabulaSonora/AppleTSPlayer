@@ -125,7 +125,7 @@ struct EngineControlsView: View {
                     // go back up -- that is the only way to find the right value for a given machine.
                     Text(player.underruns == 0
                          ? "no dropouts"
-                         : "\(player.underruns) dropout\(player.underruns == 1 ? "" : "s")")
+                         : "\(player.underruns) dropouts")
                         .font(.caption.monospacedDigit())
                         .foregroundStyle(player.underruns == 0 ? Color.secondary : Color.orange)
                 }
