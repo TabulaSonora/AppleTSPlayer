@@ -101,8 +101,13 @@ struct PartLabelTests {
         #expect(part.detail.contains("resolves against bank 125"))
 
         // The compact form drops the kit and one of the two program conventions to fit a row, but
-        // never this: it is the whole difference between what was sent and what is sounding.
-        #expect(part.numbers.contains("Bank 64:0→125"))
+        // never the arrow: it is the whole difference between what was sent and what is sounding.
+        //
+        // The pair in front of it is 0:0, not 64:0, and that is the XG bank swap rather than a lost
+        // number. Under XG the part's `bank` holds what GS would call the LSB -- 0, which is what
+        // the file sent -- while the MSB of 64 lands in the engine's `xg_bank_msb` and never
+        // reaches the part's own pair. What it turns into is the 125 on the right.
+        #expect(part.numbers == "Patch 1 · Bank 0:0→125")
     }
 
     /// The numbers behind the name, which is what the strip has no room to spell out.

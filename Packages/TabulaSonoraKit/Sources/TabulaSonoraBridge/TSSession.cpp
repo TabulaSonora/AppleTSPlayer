@@ -113,6 +113,18 @@ void Session::load_song(const std::string& path)
     song_events_ = std::move(events);
     song_loop_ = parsed.loop;
 
+    // Taken from the same bytes, after the parse rather than before it: `smf::load` is what decides
+    // whether this file is playable at all, and a file it throws on should not leave a half-filled
+    // inspector behind describing something that never loaded.
+    song_info_ = read_song_info(bytes, file_name(path));
+    song_info_.length = song_length_;
+    if (song_loop_) {
+        song_info_.has_loop = true;
+        song_info_.loop_start = song_loop_->start;
+        song_info_.loop_end = song_loop_->end;
+        song_info_.loop_soft = song_loop_->soft;
+    }
+
     if (engine_) {
         engine_->reset();
         arm_player();
@@ -126,6 +138,7 @@ void Session::unload_song()
     song_name_.clear();
     song_length_ = 0;
     song_loop_.reset();
+    song_info_ = {};
     used_channels_.fill(false);
     if (engine_) {
         engine_->reset();
@@ -429,6 +442,26 @@ ToneGeneratorOptions Session::options() const
     options.extended_interpolation = settings_.extendedInterpolation;
     options.output_gain = settings_.outputGain;
     options.channels = &channels_;
+
+    // The module's own timing, and deliberately not settings.
+    //
+    // Neither of these is an option on the module: `TG_ShortMidiIn` only rings a message and
+    // `TG_Process` walks it out four 32-sample chunks later, always, and `tg_output_filter` runs on
+    // every chunk it emits. The engine defaults them the other way because its own unit tests send
+    // a message and inspect a part on the next line, which is a convenience for testing *laws* and
+    // the wrong setting for rendering a *song*.
+    //
+    // Left unset, this app started every note 128 samples early and skipped a stage the hardware
+    // always runs -- a fidelity bug in a program whose whole purpose is the hardware's voice. It
+    // also stopped being comparable: `tabula-sonora render` sets both unconditionally as of engine
+    // fa3c9a6a, with no flag to ask for the old behaviour, so an export is a byte comparison
+    // against a differently-timed engine unless this matches it.
+    //
+    // The cost is four milliseconds of latency on live MIDI, which the module also has, against a
+    // uniform shift that is inaudible in playback.
+    options.event_delay_blocks = 4;
+    options.bypass_output_filter = false;
+
     return options;
 }
 

@@ -15,6 +15,58 @@ enum TestSong {
         return Data(bytes)
     }
 
+    /// A file of any format, division and track count.
+    ///
+    /// The single-track helper above covers what the render tests need; anything reading a file's
+    /// *own* description of itself needs more shapes than that -- a format 1 conductor track, an
+    /// SMPTE division, a track that is only text.
+    static func smf(format: UInt16 = 0, division: UInt16 = 96, tracks: [[UInt8]]) -> Data {
+        var bytes: [UInt8] = Array("MThd".utf8) + [0, 0, 0, 6]
+        bytes += withUnsafeBytes(of: format.bigEndian) { Array($0) }
+        bytes += withUnsafeBytes(of: UInt16(tracks.count).bigEndian) { Array($0) }
+        bytes += withUnsafeBytes(of: division.bigEndian) { Array($0) }
+
+        for track in tracks {
+            bytes += Array("MTrk".utf8)
+            bytes += withUnsafeBytes(of: UInt32(track.count).bigEndian) { Array($0) }
+            bytes += track
+        }
+        return Data(bytes)
+    }
+
+    /// A MIDI variable-length quantity: seven bits a byte, high bit set on all but the last.
+    ///
+    /// Worth a function rather than a literal even for a delta of 192: written as one byte that is
+    /// a *continuation* marker, and the reader swallows the byte after it and desynchronises the
+    /// rest of the track. A fixture with that in it fails as a parser bug somewhere else entirely.
+    static func variableLength(_ value: Int) -> [UInt8] {
+        var bytes: [UInt8] = [UInt8(value & 0x7F)]
+        var rest = value >> 7
+        while rest > 0 {
+            bytes.insert(UInt8((rest & 0x7F) | 0x80), at: 0)
+            rest >>= 7
+        }
+        return bytes
+    }
+
+    /// A meta event, carrying raw bytes -- so a test can hand it text in an encoding Swift would
+    /// not let it write as a `String`.
+    static func meta(_ type: UInt8, _ payload: [UInt8], delta: Int = 0) -> [UInt8] {
+        variableLength(delta) + [0xFF, type] + variableLength(payload.count) + payload
+    }
+
+    static func meta(_ type: UInt8, _ text: String, delta: Int = 0) -> [UInt8] {
+        meta(type, Array(text.utf8), delta: delta)
+    }
+
+    /// FF 51, microseconds per quarter note.
+    static func tempo(_ microseconds: UInt32, delta: Int = 0) -> [UInt8] {
+        meta(0x51, [UInt8((microseconds >> 16) & 0xFF), UInt8((microseconds >> 8) & 0xFF),
+                    UInt8(microseconds & 0xFF)], delta: delta)
+    }
+
+    static let endOfTrack: [UInt8] = [0x00, 0xFF, 0x2F, 0x00]
+
     /// A SysEx event as SMF spells it: the length counts everything after the `F0`.
     static func sysEx(_ payload: [UInt8]) -> [UInt8] {
         [0xF0, UInt8(payload.count)] + payload

@@ -12,7 +12,11 @@ import TabulaSonoraBridge
 @Observable
 public final class Player {
     /// The engine's frame rate. Everything measured in frames is at this rate.
-    public static let sampleRate = TSEngine.sampleRate
+    ///
+    /// `nonisolated` because it is a constant of the engine, not state of this player: anything
+    /// converting frames to seconds -- `SongInfo`, a value type built off the main actor -- needs it
+    /// without hopping to the main actor to read a number that cannot change.
+    public nonisolated static let sampleRate = TSEngine.sampleRate
 
     /// The `SCCore.dll` build the engine requires, for an import screen to name.
     public static let requiredROM = ROMIdentity.pinned
@@ -21,6 +25,15 @@ public final class Player {
 
     public private(set) var romName: String?
     public private(set) var songName: String?
+
+    /// What the loaded file says about itself: its tracks, its text, its markers, and the module it
+    /// asks for.
+    ///
+    /// Read once when the file loads and never on the display tick -- it is static for the life of
+    /// a song. Published beside `songName` rather than through the snapshot for that reason, and
+    /// because a view driven off the name would otherwise read a snapshot still describing the
+    /// previous file.
+    public private(set) var songInfo: SongInfo?
     public private(set) var isPlaying = false
     public private(set) var isComplete = false
 
@@ -141,6 +154,7 @@ public final class Player {
     public func loadSong(at url: URL) throws {
         try engine.loadSong(atPath: url.path(percentEncoded: false))
         songName = engine.songName
+        songInfo = SongInfo(engine.songInfo)
         isComplete = false
         try startOutput()
         startTicking()
@@ -156,6 +170,7 @@ public final class Player {
         pause()
         engine.unloadSong()
         songName = nil
+        songInfo = nil
         isComplete = false
         nowPlaying?.clear()
     }

@@ -114,6 +114,10 @@ public:
     [[nodiscard]] std::string rom_name() const;
     [[nodiscard]] std::string song_name() const;
 
+    /// What the loaded file says about itself. Copied out under the lock, like every other control
+    /// call: it is static for the life of a song, so nothing about it belongs on the display tick.
+    [[nodiscard]] SongInfo song_info() const;
+
     /// Renders the loaded song to a WAV file. Runs on the calling thread, over a second generator,
     /// while playback continues.
     void export_wav(const std::string& path, const std::function<bool(double)>& progress);

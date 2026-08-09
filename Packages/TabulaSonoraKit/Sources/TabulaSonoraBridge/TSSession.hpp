@@ -1,5 +1,6 @@
 #pragma once
 
+#include "TSSongInfo.hpp"
 #include "TSTypes.h"
 
 #include "tabulasonora/note_renderer.hpp"
@@ -143,6 +144,15 @@ public:
     [[nodiscard]] const std::string& rom_name() const noexcept { return rom_name_; }
     [[nodiscard]] const std::string& song_name() const noexcept { return song_name_; }
 
+    /// What the loaded file says about itself: names, text, lyrics, markers, and the module it asks
+    /// for.
+    ///
+    /// Read once at load rather than on demand, because the alternative needs the path kept and the
+    /// file read a second time on whichever thread asked -- and the only thread that may touch a
+    /// session is this one, which is the one playing. The walk costs strictly less than the parse
+    /// that has just run over the same bytes.
+    [[nodiscard]] const SongInfo& song_info() const noexcept { return song_info_; }
+
     /// All the generator settings at once: one rebuild, with part state carried across it.
     void set_settings(const TSEngineSettings& settings);
     [[nodiscard]] const TSEngineSettings& settings() const noexcept { return settings_; }
@@ -248,6 +258,7 @@ private:
     std::vector<MidiEvent> song_events_;
     std::int64_t song_length_ = 0;
     std::optional<smf::SongLoop> song_loop_;
+    SongInfo song_info_;
     bool looping_ = false;
 
     /// Which *channel addresses* the loaded song sends on, as `port * 16 + channel`.

@@ -121,6 +121,131 @@ typedef NS_ERROR_ENUM(TSEngineErrorDomain, TSEngineError) {
 
 @end
 
+/// The module a file asks to be played on, as far as it says so at all.
+///
+/// `unstated`, `gm` and `gm2` name no tone map on purpose -- a General MIDI file is content to play
+/// on any of the vintages, and saying otherwise would invent an intent the file does not have. The
+/// rest share their raw values with `TSToneMap`.
+///
+/// These must track `ts::apple::SongVintage`; the mapping in `TSEngine.mm` is a switch rather than a
+/// cast so a divergence is a compiler error rather than a wrong answer.
+typedef NS_ENUM(NSInteger, TSSongVintage) {
+    TSSongVintageUnstated = 0,
+    TSSongVintageGM = 1,
+    TSSongVintageGM2 = 2,
+    TSSongVintageSC55 = 1 << 8,
+    TSSongVintageSC88,
+    TSSongVintageSC88Pro,
+    TSSongVintageSC8820,
+    TSSongVintageXG,
+};
+
+/// A marker meta event, and where in the song it falls.
+@interface TSSongMarker : NSObject
+
+@property (nonatomic, readonly) NSString *text;
+/// Frames at 32 kHz, matching `TSSnapshot.position` -- so this can be handed straight to a seek.
+@property (nonatomic, readonly) int64_t position;
+
+@end
+
+/// One track of the file, in the order the file stores them.
+@interface TSSongTrack : NSObject
+
+/// 1-based, counting every MTrk including a format-1 tempo track that plays nothing.
+@property (nonatomic, readonly) NSInteger number;
+/// FF 03, Sequence/Track Name.
+@property (nonatomic, readonly) NSString *name;
+/// FF 04, Instrument Name. Apart from `name` because a file may carry both, and because FF 04
+/// doubles as a port tag in files predating FF 09.
+@property (nonatomic, readonly) NSString *instrument;
+/// Channels this track sends voice messages on, ascending and zero-based.
+@property (nonatomic, readonly) NSArray<NSNumber *> *channels;
+/// Note-ons with non-zero velocity. What makes a silent tempo track visibly silent.
+@property (nonatomic, readonly) NSInteger notes;
+
+@end
+
+/// Everything the loaded file says about itself, beyond the events the engine plays.
+///
+/// Read once at load, from a walk of the file's own chunks: the engine's reader consumes and drops
+/// every meta event except tempo, the port tags and the loop markers, which is right for a renderer
+/// and leaves nothing for a reader.
+///
+/// A Standard MIDI File declares no text encoding, so the reader guesses one for the whole file and
+/// the strings here have already been through it. `-[TSEngine songInfo]` is where that happens.
+@interface TSSongInfo : NSObject
+
+/// Whether a file was found and understood at all. Everything below is meaningless when NO.
+@property (nonatomic, readonly, getter=isValid) BOOL valid;
+
+/// Whether the bytes on disk were something other than a Standard MIDI File -- an XMI, a MUS, an
+/// HMI -- and had to be converted to be read. The converter reports *that* it converted rather than
+/// what from, so this is a flag and not a name.
+@property (nonatomic, readonly, getter=isConverted) BOOL converted;
+
+/// 0, 1 or 2, as the header declares.
+@property (nonatomic, readonly) NSInteger format;
+/// MTrk chunks found. Not the header's count, which malformed files get wrong.
+@property (nonatomic, readonly) NSInteger trackCount;
+/// Ticks per quarter note. Zero when the file uses SMPTE timing, which has no such thing.
+@property (nonatomic, readonly) NSInteger division;
+
+/// The *first* tempo the file sets, in bpm, or zero if it sets none. Not an average: a file that
+/// ritards to a halt has a meaningful opening tempo and a meaningless mean.
+@property (nonatomic, readonly) double initialTempoBPM;
+/// How many times the file changes tempo -- whether the number above describes the piece or its
+/// first bar.
+@property (nonatomic, readonly) NSInteger tempoChanges;
+
+/// FF 58, as "4/4". Empty when the file declares none.
+@property (nonatomic, readonly) NSString *timeSignature;
+/// FF 59, as "C major". Empty when the file declares none.
+@property (nonatomic, readonly) NSString *keySignature;
+
+@property (nonatomic, readonly) NSArray<TSSongTrack *> *tracks;
+
+/// FF 02, Copyright Notice.
+@property (nonatomic, readonly) NSString *copyright;
+/// FF 01, Text, minus the Soft Karaoke `@` lines. Deduplicated in order of first appearance: a file
+/// that repeats its credit once per track is common, and listing it seventeen times is not
+/// information.
+@property (nonatomic, readonly) NSArray<NSString *> *text;
+
+/// FF 06, Marker, minus the ones that only mark the loop, ordered by position.
+///
+/// Not deduplicated by text, unlike `text`: a file that marks "Verse 1" twice is marking two
+/// places. Only an exact repeat at the same tick is dropped.
+@property (nonatomic, readonly) NSArray<TSSongMarker *> *markers;
+
+/// The lyric sheet, as text, with no timing -- assembled from whichever of the three karaoke
+/// dialects the file uses.
+@property (nonatomic, readonly) NSString *lyrics;
+/// Soft Karaoke's own `@T` header lines: conventionally the title, then the author.
+@property (nonatomic, readonly) NSArray<NSString *> *karaokeHeadings;
+
+/// Position of the final event, in frames at 32 kHz.
+///
+/// Here rather than read from a snapshot on purpose: the snapshot refreshes on a display tick,
+/// which happens after the song name has already told everything watching that the file changed.
+@property (nonatomic, readonly) int64_t length;
+
+@property (nonatomic, readonly) BOOL hasLoop;
+@property (nonatomic, readonly) int64_t loopStart;
+@property (nonatomic, readonly) int64_t loopEnd;
+/// Whether the file marked the end explicitly. A soft loop rewinds cleanly; a hard one has its end
+/// inferred and replays controllers the way a seek does.
+@property (nonatomic, readonly) BOOL loopSoft;
+
+@property (nonatomic, readonly) TSSongVintage vintage;
+/// "SC-88", "General MIDI" -- or empty when the file states nothing.
+@property (nonatomic, readonly) NSString *vintageName;
+/// The evidence for the verdict, for showing beside it: "GS Reset · bank select LSB 2". Ours rather
+/// than the file's, so it is plain ASCII and needs no decoding.
+@property (nonatomic, readonly) NSString *vintageEvidence;
+
+@end
+
 /// The engine, its render thread and its ring.
 ///
 /// Every method here is safe to call from one controlling thread while playback runs. The engine
@@ -146,6 +271,12 @@ typedef NS_ERROR_ENUM(TSEngineErrorDomain, TSEngineError) {
 
 @property (nonatomic, readonly, nullable) NSString *romName;
 @property (nonatomic, readonly, nullable) NSString *songName;
+
+/// What the loaded file says about itself.
+///
+/// Read once at load and copied out under the control lock, not sampled on the display tick: it is
+/// static for the life of a song. Ask for it when the song name changes.
+@property (nonatomic, readonly) TSSongInfo *songInfo;
 
 @property (nonatomic, getter=isPaused) BOOL paused;
 

@@ -26,6 +26,72 @@ std::string to_std(NSString *value)
     return value.UTF8String ? std::string{value.UTF8String} : std::string{};
 }
 
+/// The Cocoa encoding to try first, from the reader's guess.
+///
+/// CP932 rather than plain Shift-JIS for the Japanese case: it decodes everything Shift-JIS does
+/// plus the NEC and IBM extensions, which real files carry and a strict decoder rejects outright --
+/// and the point of the guess is to read the file, not to grade it.
+NSStringEncoding cocoa_encoding(ts::apple::TextEncoding encoding)
+{
+    switch (encoding) {
+    case ts::apple::TextEncoding::ascii:
+    case ts::apple::TextEncoding::utf8:
+        return NSUTF8StringEncoding;
+    case ts::apple::TextEncoding::shift_jis:
+        return CFStringConvertEncodingToNSStringEncoding(kCFStringEncodingDOSJapanese);
+    case ts::apple::TextEncoding::cp1252:
+        break;
+    }
+    return NSWindowsCP1252StringEncoding;
+}
+
+/// A file's raw bytes as a string, through the encoding the reader guessed for the whole file.
+///
+/// Two fallbacks, and neither is decoration. The guess is made from a *sample* of the file's text,
+/// so a string the detector never saw can still be malformed under it -- a file that mixes
+/// encodings, and they exist. CP1252 catches most of that, and Latin-1 catches the rest by
+/// construction: every one of its 256 bytes maps to something, so it cannot fail and the string
+/// cannot come back nil.
+NSString *decoded(const std::string &raw, ts::apple::TextEncoding encoding)
+{
+    if (raw.empty()) {
+        return @"";
+    }
+
+    NSData *bytes = [NSData dataWithBytes:raw.data() length:raw.size()];
+    const NSStringEncoding candidates[] = {cocoa_encoding(encoding), NSWindowsCP1252StringEncoding,
+                                           NSISOLatin1StringEncoding};
+    for (const NSStringEncoding candidate : candidates) {
+        if (NSString *text = [[NSString alloc] initWithData:bytes encoding:candidate]) {
+            return text;
+        }
+    }
+    return @"";
+}
+
+TSSongVintage to_vintage(ts::apple::SongVintage vintage)
+{
+    switch (vintage) {
+    case ts::apple::SongVintage::unstated:
+        return TSSongVintageUnstated;
+    case ts::apple::SongVintage::gm:
+        return TSSongVintageGM;
+    case ts::apple::SongVintage::gm2:
+        return TSSongVintageGM2;
+    case ts::apple::SongVintage::sc55:
+        return TSSongVintageSC55;
+    case ts::apple::SongVintage::sc88:
+        return TSSongVintageSC88;
+    case ts::apple::SongVintage::sc88pro:
+        return TSSongVintageSC88Pro;
+    case ts::apple::SongVintage::sc8820:
+        return TSSongVintageSC8820;
+    case ts::apple::SongVintage::xg:
+        return TSSongVintageXG;
+    }
+    return TSSongVintageUnstated;
+}
+
 void fill_error(NSError **error, TSEngineError code, const std::string &message)
 {
     if (error == nullptr) {
@@ -138,6 +204,111 @@ void fill_error(NSError **error, TSEngineError code, const std::string &message)
 
 @end
 
+#pragma mark - TSSongInfo
+
+@implementation TSSongMarker
+
+- (instancetype)initWithMarker:(const ts::apple::SongMarker &)marker
+                      encoding:(ts::apple::TextEncoding)encoding
+{
+    self = [super init];
+    if (self) {
+        _text = decoded(marker.text, encoding);
+        _position = marker.position;
+    }
+    return self;
+}
+
+@end
+
+@implementation TSSongTrack
+
+- (instancetype)initWithTrack:(const ts::apple::SongTrack &)track
+                     encoding:(ts::apple::TextEncoding)encoding
+{
+    self = [super init];
+    if (self) {
+        _number = track.number;
+        _name = decoded(track.name, encoding);
+        _instrument = decoded(track.instrument, encoding);
+        _notes = track.notes;
+
+        NSMutableArray<NSNumber *> *channels =
+            [NSMutableArray arrayWithCapacity:track.channels.size()];
+        for (const int channel : track.channels) {
+            [channels addObject:@(channel)];
+        }
+        _channels = channels;
+    }
+    return self;
+}
+
+@end
+
+@implementation TSSongInfo
+
+- (instancetype)initWithInfo:(const ts::apple::SongInfo &)info
+{
+    self = [super init];
+    if (self) {
+        const ts::apple::TextEncoding encoding = info.encoding;
+
+        _valid = info.valid;
+        _converted = !info.container.empty();
+        _format = info.format;
+        _trackCount = info.track_count;
+        _division = info.division;
+        _initialTempoBPM = info.initial_tempo_bpm;
+        _tempoChanges = info.tempo_changes;
+
+        // Ours, not the file's, so they are ASCII and go across untouched.
+        _timeSignature = to_ns(info.time_signature);
+        _keySignature = to_ns(info.key_signature);
+        _vintageEvidence = to_ns(info.vintage_evidence);
+        _vintageName = to_ns(ts::apple::vintage_name(info.vintage));
+        _vintage = to_vintage(info.vintage);
+
+        _copyright = decoded(info.copyright, encoding);
+        _lyrics = decoded(info.lyrics, encoding);
+
+        NSMutableArray<NSString *> *text = [NSMutableArray arrayWithCapacity:info.text.size()];
+        for (const std::string &line : info.text) {
+            [text addObject:decoded(line, encoding)];
+        }
+        _text = text;
+
+        NSMutableArray<NSString *> *headings =
+            [NSMutableArray arrayWithCapacity:info.karaoke_headings.size()];
+        for (const std::string &heading : info.karaoke_headings) {
+            [headings addObject:decoded(heading, encoding)];
+        }
+        _karaokeHeadings = headings;
+
+        NSMutableArray<TSSongTrack *> *tracks =
+            [NSMutableArray arrayWithCapacity:info.tracks.size()];
+        for (const ts::apple::SongTrack &track : info.tracks) {
+            [tracks addObject:[[TSSongTrack alloc] initWithTrack:track encoding:encoding]];
+        }
+        _tracks = tracks;
+
+        NSMutableArray<TSSongMarker *> *markers =
+            [NSMutableArray arrayWithCapacity:info.markers.size()];
+        for (const ts::apple::SongMarker &marker : info.markers) {
+            [markers addObject:[[TSSongMarker alloc] initWithMarker:marker encoding:encoding]];
+        }
+        _markers = markers;
+
+        _length = info.length;
+        _hasLoop = info.has_loop;
+        _loopStart = info.loop_start;
+        _loopEnd = info.loop_end;
+        _loopSoft = info.loop_soft;
+    }
+    return self;
+}
+
+@end
+
 #pragma mark - TSEngine
 
 @implementation TSEngine {
@@ -197,6 +368,11 @@ void fill_error(NSError **error, TSEngineError code, const std::string &message)
 {
     const std::string name = _player->song_name();
     return name.empty() ? nil : to_ns(name);
+}
+
+- (TSSongInfo *)songInfo
+{
+    return [[TSSongInfo alloc] initWithInfo:_player->song_info()];
 }
 
 - (BOOL)isPaused

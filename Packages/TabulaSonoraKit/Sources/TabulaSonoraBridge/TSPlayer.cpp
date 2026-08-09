@@ -161,6 +161,12 @@ std::string Player::song_name() const
     return session_.song_name();
 }
 
+SongInfo Player::song_info() const
+{
+    const std::lock_guard<std::mutex> guard{lock_};
+    return session_.song_info();
+}
+
 void Player::export_wav(const std::string& path, const std::function<bool(double)>& progress)
 {
     // Held for the whole export, and it is what keeps the borrowed note renderer alive; `lock_` is
@@ -255,9 +261,20 @@ void Player::run()
 
     int until_publish = 0;
 
-    /// Whether live MIDI arrived since the last block. Local to the render loop: the inbox is
-    /// drained here and nowhere else.
-    bool live_activity = false;
+    /// Blocks still to render because live MIDI arrived, before sounding voices take over.
+    ///
+    /// A count rather than a flag, and that is not slack for its own sake. The generator is given
+    /// the module's own event delay, so `TG_Process` walks a message out of its ring four 32-sample
+    /// chunks after it was rung rather than acting on it at once -- which means the voice does not
+    /// exist yet when the *next* block asks whether there is anything to render. With a single
+    /// block of grace the loop went to sleep on top of a note that had not started, and nothing
+    /// woke it: the message was spent, no voice was sounding, and a key pressed with the transport
+    /// stopped was silent forever. Four blocks covers the staging ring at any block size, and costs
+    /// 16 ms of a thread that would otherwise be napping.
+    ///
+    /// Local to the render loop: the inbox is drained here and nowhere else.
+    static constexpr int live_grace_blocks = 4;
+    int live_blocks = 0;
 
     while (!quit_.load(std::memory_order_relaxed)) {
         // How long to wait before looking again, decided under the lock and slept *outside* it.
@@ -274,7 +291,9 @@ void Player::run()
 
             const std::lock_guard<std::mutex> guard{lock_};
 
-            live_activity = live_activity || !midi.empty();
+            if (!midi.empty()) {
+                live_blocks = live_grace_blocks;
+            }
             for (const auto& message : midi) {
                 session_.send_channel(message.port, message.status, message.data1, message.data2);
             }
@@ -302,11 +321,15 @@ void Player::run()
             // Conflating the two meant live notes could only be heard over a playing song --
             // pressing a key with nothing loaded produced nothing at all.
             //
-            // Live messages count for one block on their own so that a controller change with no
-            // note behind it is not dropped; after that, sounding voices are what keep it awake,
-            // which covers releases and held pedals without a timer.
-            const bool live = session_.has_rom() && (live_activity || session_.active_voices() > 0);
-            live_activity = false;
+            // Live messages count for a few blocks on their own, so that a controller change with
+            // no note behind it is not dropped and a note-on outlives the generator's own event
+            // delay; after that, sounding voices are what keep it awake, which covers releases and
+            // held pedals without a timer.
+            const bool live = session_.has_rom()
+                              && (live_blocks > 0 || session_.active_voices() > 0);
+            if (live_blocks > 0) {
+                --live_blocks;
+            }
 
             const bool idle = transport_idle && !live;
 
