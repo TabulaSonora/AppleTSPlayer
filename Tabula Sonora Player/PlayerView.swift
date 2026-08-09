@@ -29,13 +29,21 @@ struct PlayerView: View {
     var body: some View {
         #if os(macOS)
         // No engine panel here: those are preferences, and they live in the Settings scene where
-        // ⌘, reaches them. The window is the transport and the mixer.
+        // ⌘, reaches them. The window is the transport and the mixer, with what the file says about
+        // itself in an inspector beside them.
         VStack(spacing: 0) {
             TransportView(failure: $failure)
             Divider()
             MixerView()
         }
         .frame(minWidth: 480, minHeight: 520)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) { songInfoToggle }
+        }
+        .inspector(isPresented: Binding(get: { library.isShowingSongInfo },
+                                        set: { library.isShowingSongInfo = $0 })) {
+            SongInfoView()
+        }
         #else
         NavigationStack {
             VStack(spacing: 0) {
@@ -54,6 +62,7 @@ struct PlayerView: View {
                     }
                     .help("Open a MIDI file")
                 }
+                ToolbarItem(placement: .secondaryAction) { songInfoToggle }
                 ToolbarItem(placement: .secondaryAction) {
                     if horizontalSizeClass == .regular {
                         Button("Engine", systemImage: "slider.horizontal.3") {
@@ -82,7 +91,21 @@ struct PlayerView: View {
                         }
                 }
             }
+            .inspector(isPresented: Binding(get: { library.isShowingSongInfo },
+                                            set: { library.isShowingSongInfo = $0 })) {
+                SongInfoView()
+            }
         }
         #endif
+    }
+
+    /// The same control on every platform, and the same state behind it as the menu item -- which
+    /// is why that state lives on `Library` rather than in this view.
+    private var songInfoToggle: some View {
+        Toggle(isOn: Binding(get: { library.isShowingSongInfo },
+                             set: { library.isShowingSongInfo = $0 })) {
+            Label("Song Information", systemImage: "text.page")
+        }
+        .help("What the file says about itself: its text, its tracks, its markers and its lyrics")
     }
 }

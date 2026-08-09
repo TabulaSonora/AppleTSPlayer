@@ -50,9 +50,9 @@ struct TransportView: View {
                       + "as they would have.")
 
                 HStack {
-                    Text(time(scrubbing ?? player.position))
+                    Text(clockText(scrubbing ?? player.position))
                     Spacer()
-                    Text(time(player.duration))
+                    Text(clockText(player.duration))
                 }
                 .font(.caption.monospacedDigit())
                 .foregroundStyle(.secondary)
@@ -175,12 +175,6 @@ struct TransportView: View {
         .foregroundStyle(.secondary)
     }
 
-    private func time(_ seconds: TimeInterval) -> String {
-        guard seconds.isFinite, seconds >= 0 else { return "0:00" }
-        let whole = Int(seconds)
-        return String(format: "%d:%02d", whole / 60, whole % 60)
-    }
-
     /// Renders the song to a WAV, asking about the destination at the only moment each platform
     /// can be asked.
     ///
@@ -240,6 +234,17 @@ struct TransportView: View {
         return panel.runModal() == .OK ? panel.url : nil
     }
     #endif
+}
+
+/// Seconds as `m:ss`.
+///
+/// Shared rather than restated wherever a time is shown, and truncating rather than rounding. The
+/// scrubber's readout and the inspector's duration are the same `song_length_` read twice, so a
+/// rounding difference between them would show one number disagreeing with itself on one screen.
+func clockText(_ seconds: TimeInterval) -> String {
+    guard seconds.isFinite, seconds >= 0 else { return "0:00" }
+    let whole = Int(seconds)
+    return String(format: "%d:%02d", whole / 60, whole % 60)
 }
 
 /// One running export, so the button can show progress and take a cancel.

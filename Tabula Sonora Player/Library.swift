@@ -21,6 +21,13 @@ final class Library {
     var isPresentingROMImporter = false
     var isPresentingSongImporter = false
 
+    /// Whether the song information inspector is open.
+    ///
+    /// Here rather than in the view that shows it because the menu item toggles the same thing, and
+    /// a `Commands` block is built outside any view's state. It is also the piece of window state
+    /// most worth surviving a file being closed and another opened.
+    var isShowingSongInfo = false
+
     private(set) var recentSongs: [URL] = []
 
     private let defaults = UserDefaults.standard
