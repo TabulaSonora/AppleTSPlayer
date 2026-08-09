@@ -53,6 +53,14 @@ public struct EngineSettings: Equatable, Sendable {
     /// Linear gain on the finished mix. Applied live, without a rebuild.
     public var outputGain: Double
 
+    /// What `outputGain` is offered over: unity to double, and no lower.
+    ///
+    /// The engine's own level is the floor rather than the middle of the range. This is a trim on
+    /// the way out of the synth, and cutting there is the wrong place to cut -- anything quieter is
+    /// what the output volume past this app is for, while taking the mix down here only spends
+    /// headroom the module has already paid for.
+    public static let gainRange = 1.0...2.0
+
     /// The engine's own defaults, read from the library rather than restated here.
     public static var `default`: EngineSettings { EngineSettings(TSEngineSettingsDefault()) }
 

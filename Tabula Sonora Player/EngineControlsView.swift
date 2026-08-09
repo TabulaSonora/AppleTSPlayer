@@ -18,6 +18,7 @@ struct EngineControlsView: View {
     private static let latencyBounds =
         Double(Player.latencyRange.lowerBound)...Double(Player.latencyRange.upperBound)
 
+
     var body: some View {
         Form {
             Section("Voice") {
@@ -72,14 +73,36 @@ struct EngineControlsView: View {
                     .help("Per-part insertion effects, which a file selects over SysEx")
             }
 
-            Section("Output") {
+            Section {
                 LabeledContent("Gain") {
-                    Slider(value: binding(\.outputGain), in: 0...2)
+                    // Two decimals, which is what the stored setting keeps. It bounds the writes a
+                    // drag makes as much as the precision: without it every pixel of motion is a
+                    // fresh value, and each value is a settings write and a trip through the engine.
+                    Slider(value: Binding(get: { player.settings.outputGain },
+                                          set: { newValue in
+                                              let rounded = (newValue * 100).rounded() / 100
+                                              guard rounded != player.settings.outputGain else {
+                                                  return
+                                              }
+                                              var settings = player.settings
+                                              settings.outputGain = rounded
+                                              player.apply(settings)
+                                          }),
+                           in: EngineSettings.gainRange)
                         .help("Linear gain on the finished mix. Applied live, without a rebuild.")
                 }
-                Text(player.settings.outputGain.formatted(.number.precision(.fractionLength(2))))
+
+                // A percentage, although the setting is a linear multiplier: "120%" says what
+                // moving the handle did, where "1.20" only says what it is called.
+                Text("\(Int((player.settings.outputGain * 100).rounded()))%")
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.secondary)
+            } header: {
+                Text("Output")
+            } footer: {
+                Text("The engine's own level is the left end. This only ever adds, because a file "
+                     + "that needs less than the module gives it is asking for the volume control "
+                     + "on the other side of the output -- and a loud one can clip on the way up.")
             }
 
             Section {

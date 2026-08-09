@@ -46,8 +46,13 @@ struct Preferences {
         if let value = defaults.object(forKey: Key.extendedInterpolation) as? Bool {
             settings.extendedInterpolation = value
         }
+        // Clamped rather than taken as read, because this is the one setting whose range narrowed:
+        // gain only ever adds now, and a value stored by a build that could also cut would leave a
+        // slider sitting at its floor while the engine went on rendering below it -- a control
+        // disagreeing with what is being heard, which is worse than a setting that moved.
         if let value = defaults.object(forKey: Key.outputGain) as? Double {
-            settings.outputGain = value
+            settings.outputGain = min(max(value, EngineSettings.gainRange.lowerBound),
+                                      EngineSettings.gainRange.upperBound)
         }
 
         return settings
