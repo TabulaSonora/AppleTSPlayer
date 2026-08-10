@@ -74,6 +74,13 @@ struct ROMSetupView: View {
                       allowedContentTypes: [.data]) { result in
             Task { await importROM(result) }
         }
+        // Anything at all, as the importer above also takes anything: this screen exists to receive
+        // one named file, and `importROM` recognises it or says precisely why it is not that
+        // file -- which is a better answer than a drag that refuses a copy the system happens not
+        // to know is a library. Folders are not `public.data` and are refused at the pointer.
+        .fileDrop(of: [.data], prompt: Text("Drop to import")) { picked in
+            Task { await importROM(.success(picked)) }
+        }
     }
 
     private func importROM(_ result: Result<URL, any Error>) async {

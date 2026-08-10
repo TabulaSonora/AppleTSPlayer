@@ -31,7 +31,11 @@ struct ContentView: View {
             if player.romName == nil {
                 ROMSetupView(failure: $failure)
             } else {
+                // Here rather than around the whole `Group`, so the setup screen's own drop -- for
+                // the ROM it is asking for -- is the only one on that screen. A song dropped before
+                // there is a voice has nowhere to go that the file importer does not already offer.
                 PlayerView(failure: $failure)
+                    .fileDrop(of: .midiFiles, prompt: Text("Drop to play")) { open(.success($0)) }
             }
         }
         .task { await loadROMIfPresent() }

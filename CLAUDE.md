@@ -131,6 +131,12 @@ its screen off stops scheduling the render thread in time and you hear dropouts.
 - Underruns are surfaced all the way to the UI on purpose. Never hide them.
 - The app reads far more than SMF (RIFF-MIDI, MIDS, MUS, XMI, GMF, HMI, Mobile XMF, LDS). Most have
   no declared UTType, so `Array<UTType>.midiFiles` matches by extension — extend it there.
+- **A drop cannot be filtered at the pointer and still find the file.** `onDrop(of:)` takes the list
+  of types and refuses the rest before release, but what it hands back is an `NSItemProvider`
+  synthesised for the type that matched — it no longer carries the drag's `public.file-url`, so a
+  dropped `.mid` offers `public.midi-audio` and nothing else and there is no way left to ask where
+  the file is. `FileDrop` uses `dropDestination(for: URL.self)`, which resolves the pasteboard's own
+  file URL, and does the type check itself on release.
 - **A mixer fader is a window onto a controller, never a gain of the app's own.** The volume and pan
   sliders send CC#7 and CC#10, so the file's next controller overrides them and a seek — which
   replays controllers — puts every strip back where the score says. A host-side trim would survive
