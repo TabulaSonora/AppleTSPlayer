@@ -37,6 +37,10 @@ struct PlayerView: View {
             MixerView()
         }
         .frame(minWidth: 480, minHeight: 520)
+        // The title bar is where a Mac window says what it is showing, so the transport no longer
+        // says it too -- see the header this replaces in `TransportView`.
+        .navigationTitle(player.songName ?? "Tabula Sonora")
+        .navigationSubtitle(subtitle)
         .toolbar {
             ToolbarItem(placement: .primaryAction) { songInfoToggle }
         }
@@ -98,6 +102,25 @@ struct PlayerView: View {
         }
         #endif
     }
+
+    #if os(macOS)
+    /// What is sounding the file, under the file's own name.
+    ///
+    /// Two different facts on purpose. With a song open the question is what is playing it, which
+    /// the tone map and the container answer together -- an `.xmi` read as an SC-8820 is two things
+    /// worth knowing at a glance. With nothing open there is no container to name, so this falls
+    /// back to the voice, which is the one thing the app has loaded and the one thing that can be
+    /// missing.
+    ///
+    /// Localised here rather than by `Text`, because the whole expression would otherwise infer
+    /// `LocalizedStringKey` and put each interpolation in the catalogue as a key of its own.
+    private var subtitle: String {
+        if let info = player.songInfo, info.isValid {
+            return "\(player.settings.map.name) · \(info.containerName)"
+        }
+        return player.romName.map { String(localized: "Sound Canvas voice · \($0)") } ?? ""
+    }
+    #endif
 
     /// The same control on every platform, and the same state behind it as the menu item -- which
     /// is why that state lives on `Library` rather than in this view.

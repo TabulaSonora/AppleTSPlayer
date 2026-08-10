@@ -67,6 +67,20 @@ struct SongInfoView: View {
     }
 }
 
+extension SongInfo {
+    /// What the bytes on disk were.
+    ///
+    /// Worth saying even though the converter only reports *that* it converted rather than what
+    /// from: it explains why an `.xmi` has track names and a format number.
+    ///
+    /// Here rather than at either place that shows it, because both the inspector's row and the
+    /// Mac window's subtitle name the same fact and two spellings of it would eventually disagree.
+    var containerName: String {
+        isConverted ? String(localized: "Converted to Standard MIDI File")
+                    : String(localized: "Standard MIDI File")
+    }
+}
+
 // MARK: - Song
 
 private struct SongPage: View {
@@ -80,10 +94,7 @@ private struct SongPage: View {
             // and repeating it as the first row of the first group says the same thing twice on one
             // screen.
             Section("File") {
-                // What the bytes were is worth saying even though the converter only reports *that*
-                // it converted: it explains why an `.xmi` has track names and a format number.
-                value("Container", info.isConverted
-                      ? "Converted to Standard MIDI File" : "Standard MIDI File")
+                value("Container", info.containerName)
                 value("Format", "\(info.format)")
                 value("Tracks", "\(info.trackCount)")
                 value("Duration", clockText(info.duration))
