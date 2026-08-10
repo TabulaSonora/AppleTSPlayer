@@ -131,6 +131,45 @@ its screen off stops scheduling the render thread in time and you hear dropouts.
 - Underruns are surfaced all the way to the UI on purpose. Never hide them.
 - The app reads far more than SMF (RIFF-MIDI, MIDS, MUS, XMI, GMF, HMI, Mobile XMF, LDS). Most have
   no declared UTType, so `Array<UTType>.midiFiles` matches by extension — extend it there.
+- **A mixer fader is a window onto a controller, never a gain of the app's own.** The volume and pan
+  sliders send CC#7 and CC#10, so the file's next controller overrides them and a seek — which
+  replays controllers — puts every strip back where the score says. A host-side trim would survive
+  both and would then describe a mix neither the module nor an export of it would ever produce. It
+  follows that anything written this way needs the echo suppression in `Fader`: the snapshot is
+  polled at 10 Hz and would otherwise drag a slider back out from under the pointer mid-drag.
+- **Address a control change by the part's receive channel, not its slot.** `dispatch_channel` walks
+  the parts looking for one listening on the channel, so a message sent to `index % 16` reaches
+  whatever part is on that channel — which after a bulk dump is not the strip you meant. Use
+  `displayChannel`, and accept that one fader moves two strips when a file points two parts at one
+  channel. Mute and solo are the opposite: `ChannelMask` is indexed **by slot**.
+- **Size classes: test both directions before hiding something for space.** A large iPhone in
+  landscape reports a *regular* width with almost no height. `MixerView.roomForLevels` requires both
+  to be regular, and `TransportView` switches on `verticalSizeClass` alone, which is exactly "this
+  screen is short" — every iPhone in landscape, no iPad ever.
+
+### Localisation
+
+Strings reach `Localizable.xcstrings` **only from literals**. `.help("a " + "b")` is an expression,
+so the key is never extracted and ships in English in every language, with no warning — several
+strings had silently gone untranslated this way. Keep a localizable string on one literal (shorten
+the wording rather than joining two), and put user-facing text in the **app target**: the
+`TabulaSonoraKit` package has no catalogue, so `String(localized:)` there resolves against a bundle
+with nothing in it.
+
+A **Mac-only build never extracts `#if !os(macOS)` strings**. Build for a device too before
+believing the catalogue is complete, and diff its key set against `git show HEAD:` to see what
+actually landed.
+
+### Versions and commits
+
+`MARKETING_VERSION` is semver; `CURRENT_PROJECT_VERSION` is the commit count on `main` including the
+release commit (so compute `git rev-list --count HEAD` **+ 1** before committing). Both live only in
+`project.pbxproj`, twice each — Debug and Release move together. The bump is its own commit,
+`Release <version>`, made after the work it covers is already committed.
+
+Commit messages say plainly what changed: a factual imperative subject, then a body that takes each
+non-obvious decision and gives the reasoning and the constraint behind it. No metaphors in the
+subject line. Code comments keep their discursive voice; this applies to commit messages.
 
 ### Adding an engine setting
 
