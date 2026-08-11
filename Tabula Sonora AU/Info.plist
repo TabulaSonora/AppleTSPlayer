@@ -28,12 +28,12 @@
 					<key>type</key>
 					<string>aumu</string>
 					<!--
-					  The marketing version as the Component Manager encodes it: 0x010200 for
-					  1.2.0. Hosts compare this number when they decide whether a session's plugin
+					  The marketing version as the Component Manager encodes it: 0x020000 for
+					  2.0.0. Hosts compare this number when they decide whether a session's plugin
 					  is the one installed, so it moves with MARKETING_VERSION in project.pbxproj.
 					-->
 					<key>version</key>
-					<integer>66048</integer>
+					<integer>131072</integer>
 				</dict>
 			</array>
 		</dict>
