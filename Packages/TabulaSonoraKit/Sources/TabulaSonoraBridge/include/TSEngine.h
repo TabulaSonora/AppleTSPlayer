@@ -339,6 +339,52 @@ typedef NS_ENUM(NSInteger, TSSongVintage) {
 
 @end
 
+/// The engine as an instrument, for an Audio Unit to render from its own render block.
+///
+/// `TSEngine` above is the app's arrangement: a render thread runs ahead of the device and a ring
+/// absorbs the difference. A plugin cannot have that. Its host decides when to call it and how much
+/// to ask for, and during a bounce it asks far faster than realtime -- which a producer running at
+/// wall-clock rate can never satisfy, so the ring would hand back silence for the one operation that
+/// has to be exact.
+///
+/// This renders on the thread that asks, for exactly the frames asked for, and resamples the
+/// engine's 32 kHz to whatever rate the host runs at.
+///
+/// Everything here is for the *control* side -- loading, settings, what the panel draws. The render
+/// block uses the C functions below and touches nothing on this object.
+@interface TSInstrument : NSObject
+
+/// Opens a `SCCore.dll` and builds a new engine over it, then swaps it in.
+///
+/// Call off the main thread: the 27 MB is read and parsed here. Rendering continues throughout --
+/// silent until this is the first ROM, and uninterrupted when it is not.
+- (BOOL)loadROMAtPath:(NSString *)path
+          verifyFully:(BOOL)verifyFully
+                error:(NSError **)error;
+
+@property (nonatomic, readonly, nullable) NSString *romName;
+@property (nonatomic, readonly) BOOL hasROM;
+
+/// Rebuilds the generator unless only the gain moved. Costs the sounding voices, as it does in the
+/// app, and one block of silence while it happens.
+- (void)applySettings:(TSEngineSettings)settings;
+
+/// Sizes the resampler for the host's rate and its largest block, and resets it.
+///
+/// Call from `allocateRenderResources`, which is where a plugin is allowed to allocate; nothing on
+/// the render path allocates afterwards.
+- (void)prepareForSampleRate:(double)sampleRate maximumFrames:(uint32_t)maximumFrames;
+
+/// The delay to report to the host: the one input frame the interpolator looks ahead by.
+@property (nonatomic, readonly) double latencySeconds;
+
+- (TSSnapshot *)snapshot;
+
+/// Pass to the C functions below. Valid for this object's lifetime.
+@property (nonatomic, readonly) void *handle NS_RETURNS_INNER_POINTER;
+
+@end
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -353,6 +399,32 @@ extern "C" {
 /// definition would be mangled as C++ and Swift, which reads this header as Objective-C, would look
 /// for a symbol nobody defined.
 extern uint32_t TSEngineRingRead(void *ringHandle, float *left, float *right, uint32_t frames);
+
+/// The plugin's render path, and the whole of what an Audio Unit's render block may touch.
+///
+/// Plain C for the same reason `TSEngineRingRead` is: a render block must reach the engine without
+/// an Objective-C message send, a Swift runtime call or a retain. Every one of these takes the
+/// `handle` from `TSInstrument`.
+///
+/// None of them blocks. They take the instrument's lock with `try_lock` and give up rather than
+/// wait, so the worst a control change costs is one block of silence and the messages that arrived
+/// during it -- and the only control change that can cause one is a rebuild, which was going to
+/// take the sounding voices anyway.
+
+/// Fills one block at the rate given to `prepareForSampleRate:maximumFrames:`, resampling from the
+/// engine's 32 kHz. Fills silence when there is no ROM.
+extern void TSInstrumentRender(void *handle, float *left, float *right, uint32_t frames);
+
+/// One channel voice message. `port` is 0 or 1 -- the module has two.
+extern void TSInstrumentSendChannel(void *handle, int32_t port, int32_t status, int32_t data1,
+                                    int32_t data2);
+
+/// One complete System Exclusive message, `F0` first and `F7` last. A host delivers these in
+/// fragments; putting them back together is the caller's job.
+extern void TSInstrumentSendSysEx(void *handle, int32_t port, const uint8_t *bytes, uint32_t length);
+
+/// Linear gain on the finished mix, applied at the top of the next block.
+extern void TSInstrumentSetGain(void *handle, double gain);
 
 #ifdef __cplusplus
 } // extern "C"

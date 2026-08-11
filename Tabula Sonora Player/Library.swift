@@ -7,13 +7,11 @@ import Foundation
 import Observation
 import TabulaSonoraKit
 
-/// Where the ROM lives and which files have been opened.
+/// Which files have been opened, and the window state that outlives them.
 ///
-/// The engine needs a `SCCore.dll` the user supplies from a licensed SOUND Canvas VA install. Under
-/// the App Sandbox a picked file is reachable only while its security scope is held, and the engine
-/// reads the ROM continuously for the life of a session -- so the file is copied into Application
-/// Support once and read from there afterwards. That also gives iOS and visionOS the same code path
-/// as the Mac, where a bookmark would have been an option.
+/// The ROM itself lives in `ROMStore`, in a container shared with the Audio Unit -- the plugin runs
+/// in its own sandboxed process and could not otherwise see the file the app imported. What is left
+/// here is the part that is only ever the app's: what it has played, and what it is showing.
 @MainActor
 @Observable
 final class Library {
@@ -30,57 +28,31 @@ final class Library {
 
     private(set) var recentSongs: [URL] = []
 
-    private let defaults = UserDefaults.standard
-    private static let verifiedKey = "ROMVerified"
-
-    /// Where the imported ROM is kept.
-    var romURL: URL {
-        let support = FileManager.default.urls(for: .applicationSupportDirectory,
-                                               in: .userDomainMask)[0]
-        return support.appending(path: "SCCore.dll")
+    init() {
+        // Before anything asks whether there is a ROM, so a copy imported by a build that predates
+        // the shared container is found rather than asked for again.
+        ROMStore.migrate()
     }
 
-    var hasImportedROM: Bool {
-        FileManager.default.fileExists(atPath: romURL.path(percentEncoded: false))
-    }
+    /// Where the imported ROM is kept -- the container the plugin reads too.
+    var romURL: URL { ROMStore.romURL }
+
+    var hasImportedROM: Bool { ROMStore.hasImportedROM }
 
     /// Copies a picked ROM into place. The caller then loads it, verifying fully the first time.
-    ///
-    /// Copies rather than reads: 27 MB inside the container buys one code path on three platforms,
-    /// and a file the engine can `pread` for the life of the session without holding a scope open.
     func importROM(from picked: URL) throws {
-        let scoped = picked.startAccessingSecurityScopedResource()
-        defer { if scoped { picked.stopAccessingSecurityScopedResource() } }
-
-        let manager = FileManager.default
-        try manager.createDirectory(at: romURL.deletingLastPathComponent(),
-                                    withIntermediateDirectories: true)
-
-        // To a neighbouring file first, then swapped in, so an interrupted copy cannot leave a
-        // half-written ROM that the next launch would try to verify.
-        let staging = romURL.appendingPathExtension("importing")
-        try? manager.removeItem(at: staging)
-        try manager.copyItem(at: picked, to: staging)
-
-        if manager.fileExists(atPath: romURL.path(percentEncoded: false)) {
-            _ = try manager.replaceItemAt(romURL, withItemAt: staging)
-        } else {
-            try manager.moveItem(at: staging, to: romURL)
-        }
-
-        defaults.set(false, forKey: Self.verifiedKey)
+        try ROMStore.importROM(from: picked)
     }
 
     /// Whether this copy has already been hashed once. A verified file needs only its size and PE
     /// timestamp checked on later launches, which is the difference between instant and a moment.
     var isROMVerified: Bool {
-        get { defaults.bool(forKey: Self.verifiedKey) }
-        set { defaults.set(newValue, forKey: Self.verifiedKey) }
+        get { ROMStore.isROMVerified }
+        set { ROMStore.isROMVerified = newValue }
     }
 
     func removeROM() {
-        try? FileManager.default.removeItem(at: romURL)
-        defaults.set(false, forKey: Self.verifiedKey)
+        ROMStore.removeROM()
     }
 
     func remember(song: URL) {

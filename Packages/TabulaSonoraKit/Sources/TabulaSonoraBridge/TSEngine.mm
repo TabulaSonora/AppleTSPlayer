@@ -1,5 +1,6 @@
 #import "TSEngine.h"
 
+#include "TSInstrument.hpp"
 #include "TSPlayer.hpp"
 
 #include "tabulasonora/rom_image.hpp"
@@ -487,6 +488,72 @@ void fill_error(NSError **error, TSEngineError code, const std::string &message)
 
 @end
 
+#pragma mark - TSInstrument
+
+@implementation TSInstrument {
+    std::unique_ptr<ts::apple::Instrument> _instrument;
+}
+
+- (instancetype)init
+{
+    self = [super init];
+    if (self) {
+        _instrument = std::make_unique<ts::apple::Instrument>();
+    }
+    return self;
+}
+
+- (BOOL)loadROMAtPath:(NSString *)path verifyFully:(BOOL)verifyFully error:(NSError **)error
+{
+    try {
+        _instrument->load_rom(to_std(path), verifyFully);
+        return YES;
+    } catch (const ts::RomIdentityError &failure) {
+        fill_error(error, TSEngineErrorROMIdentity, failure.what());
+    } catch (const std::exception &failure) {
+        fill_error(error, TSEngineErrorUnreadable, failure.what());
+    }
+    return NO;
+}
+
+- (nullable NSString *)romName
+{
+    const std::string name = _instrument->rom_name();
+    return name.empty() ? nil : to_ns(name);
+}
+
+- (BOOL)hasROM
+{
+    return _instrument->has_rom();
+}
+
+- (void)applySettings:(TSEngineSettings)settings
+{
+    _instrument->set_settings(settings);
+}
+
+- (void)prepareForSampleRate:(double)sampleRate maximumFrames:(uint32_t)maximumFrames
+{
+    _instrument->prepare(sampleRate, maximumFrames);
+}
+
+- (double)latencySeconds
+{
+    return _instrument->latency_seconds();
+}
+
+- (TSSnapshot *)snapshot
+{
+    return [[TSSnapshot alloc] initWithSnapshot:_instrument->snapshot()];
+}
+
+- (void *)handle
+{
+    return _instrument.get();
+}
+
+@end
+
 uint32_t TSEngineRingRead(void *ringHandle, float *left, float *right, uint32_t frames)
 {
     auto *handle = static_cast<ts::apple::Player::RingHandle *>(ringHandle);
@@ -516,4 +583,25 @@ uint32_t TSEngineRingRead(void *ringHandle, float *left, float *right, uint32_t 
 
     // `read` counts frames, not the floats it was handed.
     return static_cast<uint32_t>(supplied);
+}
+
+void TSInstrumentRender(void *handle, float *left, float *right, uint32_t frames)
+{
+    static_cast<ts::apple::Instrument *>(handle)->render(left, right, frames);
+}
+
+void TSInstrumentSendChannel(void *handle, int32_t port, int32_t status, int32_t data1,
+                             int32_t data2)
+{
+    static_cast<ts::apple::Instrument *>(handle)->send_channel(port, status, data1, data2);
+}
+
+void TSInstrumentSendSysEx(void *handle, int32_t port, const uint8_t *bytes, uint32_t length)
+{
+    static_cast<ts::apple::Instrument *>(handle)->send_sysex(port, bytes, length);
+}
+
+void TSInstrumentSetGain(void *handle, double gain)
+{
+    static_cast<ts::apple::Instrument *>(handle)->set_output_gain(gain);
 }

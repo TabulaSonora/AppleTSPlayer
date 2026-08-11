@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  The container the app and the Audio Unit share the ROM through. This is the iOS spelling, where
+	  the identifier must begin with "group."; the macOS file beside this one carries the same group
+	  under the team-prefixed name that platform requires, and is selected by
+	  CODE_SIGN_ENTITLEMENTS[sdk=macosx*]. ROMStore.appGroup holds both and must keep agreeing.
+	-->
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.co.losno.tabula-sonora</string>
+	</array>
+</dict>
+</plist>

@@ -22,9 +22,11 @@ TS_SCCORE_DLL=~/SCCore.dll TS_TEST_MIDI=~/song.mid swift test
 swift test --filter RenderTests                 # one suite
 swift test --filter "RingTests/seekingFlushesWhatWasQueued"   # one test
 
-# App
+# App (builds the AU extension with it, and embeds it)
 xcodebuild -project "Tabula Sonora Player.xcodeproj" -scheme "Tabula Sonora Player" \
   -destination 'platform=macOS' build
+
+auval -v aumu tbsn LSCo                         # the plugin; run the app once first to register it
 ```
 
 `ROMIdentityTests` needs no ROM and is the cheap proof that the engine sources compiled, linked, and
@@ -64,10 +66,14 @@ nativets/                     upstream C++20 engine (submodule, read-only)
 Sources/TabulaSonoraBridge/   Objective-C++ façade
   TSSession.{hpp,cpp}         ts::apple::Session — the chain + everything doable to it
   TSPlayer.{hpp,cpp}          ts::apple::Player  — render thread, ring, locks, MIDI inbox
+  TSInstrument.{hpp,cpp}      ts::apple::Instrument — the plugin's answer: no thread, no ring
   TSEngine.mm / TSEngine.h    the ONLY public header; TSTypes.h is plain C, shared with the C++
-Sources/TabulaSonoraKit/      Swift API the app imports
+Sources/TabulaSonoraKit/      Swift API both targets import
   Player.swift                @MainActor @Observable; the whole surface a view binds to
-Tabula Sonora Player/         SwiftUI; Library.swift owns ROM-on-disk and recents
+  Instrument.swift            the same engine for a plugin — not main-actor, see below
+  ROMStore.swift              the SCCore.dll on disk, in the app group both bundles share
+Tabula Sonora Player/         SwiftUI; Library.swift owns recents and window state
+Tabula Sonora AU/             AUv3 instrument (aumu/tbsn/LSCo), embedded in the app
 ```
 
 Engine and bridge are deliberately **one SwiftPM target**. Splitting them would make
@@ -106,10 +112,43 @@ This is the load-bearing design and most bugs here will be violations of it.
 workgroup only once its hardware runs, and a different one after a restart. Without it an iPhone with
 its screen off stops scheduling the render thread in time and you hear dropouts.
 
+### The plugin inverts all of it, on purpose
+
+`ts::apple::Instrument` has **no render thread and no ring**, and this is not a simplification — the
+ring is unusable in a plugin. Its producer runs at wall-clock rate; a DAW bouncing a track pulls
+audio as fast as it can, so every bounce would come back silence and dropouts. So the engine renders
+**inside the host's render block**, for exactly the frames asked for, and resamples 32 kHz → the
+host's rate on the way out (four-point Hermite; the app leaves that conversion to CoreAudio's mixer,
+a plugin cannot).
+
+The contract is kept, not broken: `ToneGenerator` still has exactly one owning thread, and there it
+is the host's audio thread. MIDI arrives on that same thread — the render block hands over the events
+before asking for the audio between them — so the inbox is unnecessary and messages reach the
+generator with no lock at all.
+
+What remains locked is control. `load_rom` builds a **whole second session** outside the lock and
+swaps it in; `set_settings` rebuilds under it. The render block `try_lock`s and renders one block of
+silence rather than waiting, which only happens during a rebuild — which takes the sounding voices
+anyway. Nothing on that path allocates: `prepare(rate, maxFrames)` from `allocateRenderResources`
+sizes every buffer once.
+
+`TSInstrumentRender` and its three neighbours in `TSEngine.h` are plain C for the same reason
+`TSEngineRingRead` is: a render block may not send an Objective-C message or touch the Swift runtime.
+`TabulaSonoraKit.Instrument` is deliberately **not** `@MainActor` — a host calls a plugin on threads
+it did not pick.
+
 ## Conventions worth knowing
 
 - Everything measured in frames is at **32 kHz**. The graph connects at the engine's rate so
-  CoreAudio does the conversion in the mixer; never teach the engine the device rate.
+  CoreAudio does the conversion in the mixer; never teach the engine the device rate. (The plugin is
+  the exception it has to be — see above.)
+- **The ROM lives in the app group, and nowhere else.** `ROMStore` owns the path, the import and the
+  `SCCore.dll.verified` marker beside it; `Library` only forwards. An extension is sandboxed into its
+  own container, so a group is the only place both bundles can read one file. The identifier is
+  spelled differently per platform — `group.co.losno.tabula-sonora` on iOS, team-prefixed on macOS —
+  which is why each target has two entitlements files and a `CODE_SIGN_ENTITLEMENTS[sdk=macosx*]`.
+  The verified flag is a **file**, not a preference: `UserDefaults(suiteName:)` over a group detaches
+  from `cfprefsd` on macOS and both processes then write the plist behind each other's backs.
 - A part is addressed as `port * 16 + channel`, 0–63 (`TS_MAX_PARTS`). `ports` is 1/2/4 → 16/32/64
   parts; the module itself has two.
 - **A part's index is not the channel it hears.** Parts are matched by `rxChannel`, not indexed by
@@ -166,11 +205,19 @@ A **Mac-only build never extracts `#if !os(macOS)` strings**. Build for a device
 believing the catalogue is complete, and diff its key set against `git show HEAD:` to see what
 actually landed.
 
+**The plugin has its own catalogue.** A bundle only reads its own, so `Tabula Sonora AU/` carries a
+second `Localizable.xcstrings`; a string used in both places is translated in both. The three
+languages have to move together — an untranslated plugin panel inside a translated app is worse than
+either.
+
 ### Versions and commits
 
 `MARKETING_VERSION` is semver; `CURRENT_PROJECT_VERSION` is the commit count on `main` including the
 release commit (so compute `git rev-list --count HEAD` **+ 1** before committing). Both live only in
-`project.pbxproj`, twice each — Debug and Release move together. The bump is its own commit,
+`project.pbxproj`, **four times each** — Debug and Release, app and extension, all moving together.
+The extension's `AudioComponents` `version` in `Tabula Sonora AU/Info.plist` is the same number in
+the Component Manager's encoding (`0x010200` = 66048 for 1.2.0) and moves with them: hosts compare it
+when deciding whether a saved session's plugin is the one installed. The bump is its own commit,
 `Release <version>`, made after the work it covers is already committed.
 
 Commit messages say plainly what changed: a factual imperative subject, then a body that takes each
@@ -181,7 +228,10 @@ subject line. Code comments keep their discursive voice; this applies to commit 
 
 `TSEngineSettings` in `TSTypes.h` → `Session::options()`/`rebuild()` → `EngineSettings` and its
 `bridged` in `PlayerTypes.swift` → a `Preferences.Key` (one key per setting, never an encoded blob,
-so a later addition reads back as its default) → `EngineControlsView`.
+so a later addition reads back as its default) → `EngineControlsView`. Then the plugin, which carries
+the same settings as its parameter tree: an address in `Tabula_Sonora_AUParameterAddresses.h`, a spec
+in `Parameters.swift`, a case in `EngineSettings.take(_:from:)`, and a control in the panel. A
+setting the plugin does not carry is one a host cannot save.
 
 ### Adding a snapshot field
 

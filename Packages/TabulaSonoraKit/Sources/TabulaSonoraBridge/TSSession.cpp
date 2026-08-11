@@ -271,6 +271,21 @@ void Session::send_channel(int port, int status, int data1, int data2)
     }
 }
 
+void Session::send_sysex(int port, std::span<const std::uint8_t> bytes)
+{
+    if (engine_ && !bytes.empty()) {
+        engine_->send_sysex(port, bytes);
+    }
+}
+
+void Session::set_output_gain(double gain) noexcept
+{
+    settings_.outputGain = gain;
+    if (engine_) {
+        engine_->set_output_gain(gain);
+    }
+}
+
 void Session::send_control(int port, int channel, int controller, int value)
 {
     if (engine_) {

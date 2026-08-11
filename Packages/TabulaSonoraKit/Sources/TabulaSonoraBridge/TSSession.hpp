@@ -206,6 +206,20 @@ public:
     /// One channel voice message on a port -- live MIDI and the on-screen keyboard.
     void send_channel(int port, int status, int data1, int data2);
 
+    /// One System Exclusive message on a port, `F0` and `F7` included.
+    ///
+    /// Not a nicety beside `send_channel`: GS Reset, XG System On, part-to-drum routing and the
+    /// whole bulk-dump vocabulary arrive this way, and a host that opens a session by sending a GS
+    /// Reset to an engine that cannot hear one is playing a module that was never told what it is.
+    void send_sysex(int port, std::span<const std::uint8_t> bytes);
+
+    /// The gain on the finished mix, without a rebuild.
+    ///
+    /// Kept apart from `set_settings` because it is the one setting that is a plain store into the
+    /// generator -- which makes it the one setting a real-time thread may set for itself. The
+    /// stored settings move with it so a later rebuild does not put the old gain back.
+    void set_output_gain(double gain) noexcept;
+
     /// Per-part mute and solo, addressed as `port * 16 + channel`.
     ///
     /// Lives outside the generator so it survives a rebuild, and its flags are atomic, so unlike

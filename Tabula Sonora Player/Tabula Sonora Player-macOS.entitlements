@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  The same group as the iOS file beside this one, spelled the way macOS demands: an app group
+	  identifier has to begin with the team identifier there, and with "group." on iOS, and neither
+	  platform accepts the other's spelling. One target builds for both, so the entitlements file is
+	  chosen per SDK -- see CODE_SIGN_ENTITLEMENTS[sdk=macosx*].
+
+	  ROMStore.appGroup has the same pair, and the two must agree: the container is looked up by
+	  string at runtime and a mismatch is not a build error, only an app that cannot find its ROM.
+	-->
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>$(TeamIdentifierPrefix)group.co.losno.tabula-sonora</string>
+	</array>
+</dict>
+</plist>

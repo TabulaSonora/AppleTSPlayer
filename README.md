@@ -12,12 +12,15 @@ to SMF on the way in.
 - Engine settings: vintage (SC-55 / 88 / 88Pro / 8820 / XG), 16/32/64 parts, polyphony, the four
   effect buses, output gain, and an adjustable buffer
 - WAV export, rendered through the library's own writer so the bytes match `tabula-sonora render`
+- An **AUv3 instrument** (`aumu` / `tbsn` / `LSCo`) that plays the same voice from a DAW, over MIDI
+  including GS and XG System Exclusive
 
 ## You need to supply the ROM
 
 The engine is inert without `SCCore.dll` from a licensed SOUND Canvas VA 1.1.6 install — 27,347,456
 bytes, SHA-256 `117e6aa1…bdb1`. It is read as *data* and never loaded as code. The app asks for it on
-first launch, verifies it against that build, and keeps a copy inside its own container.
+first launch, verifies it against that build, and keeps a copy in a container it shares with the
+plugin — an Audio Unit extension is sandboxed on its own and could not otherwise see the file.
 
 **Nothing Roland-derived is in this repository, and nothing derived from it should be added.**
 
@@ -51,7 +54,13 @@ is MIT and carries its own notice in the header.
 
 ## How it fits together
 
-The engine renders at 32 kHz and is single-threaded by contract. A render thread owns it and writes
-whole blocks into a lock-free ring; the `AVAudioSourceNode` callback copies out of that ring and does
-nothing else — no allocation, no lock, no engine code. A slow block eats into the ring's lead rather
-than glitching the device, and the buffer setting is how far ahead that lead runs.
+The engine renders at 32 kHz and is single-threaded by contract. In the app a render thread owns it
+and writes whole blocks into a lock-free ring; the `AVAudioSourceNode` callback copies out of that
+ring and does nothing else — no allocation, no lock, no engine code. A slow block eats into the ring's
+lead rather than glitching the device, and the buffer setting is how far ahead that lead runs.
+
+The plugin cannot work that way. Its host decides when to call it, and during a bounce it asks for
+audio far faster than realtime — which a producer running at wall-clock rate can never keep up with.
+So there the engine renders inside the host's render block, for exactly the frames asked for, and
+resamples to the host's rate on the way out. The contract still holds: one owning thread, and it is
+the host's. See [the extension's README](Tabula%20Sonora%20AU/README.md).

@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NSExtension</key>
+	<dict>
+		<key>NSExtensionAttributes</key>
+		<dict>
+			<key>AudioComponents</key>
+			<array>
+				<dict>
+					<key>description</key>
+					<string>Roland Sound Canvas voice</string>
+					<key>factoryFunction</key>
+					<string>$(PRODUCT_MODULE_NAME).AudioUnitViewController</string>
+					<key>manufacturer</key>
+					<string>LSCo</string>
+					<key>name</key>
+					<string>LoSnoCo: Tabula Sonora</string>
+					<key>sandboxSafe</key>
+					<true/>
+					<key>subtype</key>
+					<string>tbsn</string>
+					<key>tags</key>
+					<array>
+						<string>Synthesizer</string>
+					</array>
+					<key>type</key>
+					<string>aumu</string>
+					<!--
+					  The marketing version as the Component Manager encodes it: 0x010200 for
+					  1.2.0. Hosts compare this number when they decide whether a session's plugin
+					  is the one installed, so it moves with MARKETING_VERSION in project.pbxproj.
+					-->
+					<key>version</key>
+					<integer>66048</integer>
+				</dict>
+			</array>
+		</dict>
+		<key>NSExtensionPointIdentifier</key>
+		<string>com.apple.AudioUnit-UI</string>
+		<key>NSExtensionPrincipalClass</key>
+		<string>$(PRODUCT_MODULE_NAME).AudioUnitViewController</string>
+	</dict>
+</dict>
+</plist>

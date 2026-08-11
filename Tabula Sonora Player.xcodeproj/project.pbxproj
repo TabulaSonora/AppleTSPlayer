@@ -8,9 +8,34 @@
 
 /* Begin PBXBuildFile section */
 		0A71500100000000000000A3 /* TabulaSonoraKit in Frameworks */ = {isa = PBXBuildFile; productRef = 0A71500100000000000000A2 /* TabulaSonoraKit */; };
+		0AD5D3A0302A9D42007ADFAD /* TabulaSonoraKit in Frameworks */ = {isa = PBXBuildFile; productRef = 0AD5D3A1302A9D42007ADFAD /* TabulaSonoraKit */; };
+		0AD5D393302A9D42007ADFAD /* Tabula Sonora AU.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 0AD5D36A302A9D42007ADFAD /* Tabula Sonora AU.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		0AD5D391302A9D42007ADFAD /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 0AE70C1430258A96004ED9D6 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 0AD5D369302A9D42007ADFAD;
+			remoteInfo = "Tabula Sonora AU";
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		0AD5D394302A9D42007ADFAD /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			dstPath = "";
+			dstSubfolder = PlugIns;
+			files = (
+				0AD5D393302A9D42007ADFAD /* Tabula Sonora AU.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
+		0AD5D36A302A9D42007ADFAD /* Tabula Sonora AU.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "Tabula Sonora AU.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
 		0AE70C1C30258A96004ED9D6 /* Tabula Sonora Player.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Tabula Sonora Player.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -22,9 +47,25 @@
 			);
 			target = 0AE70C1B30258A96004ED9D6 /* Tabula Sonora Player */;
 		};
+		0AD5D398302A9D42007ADFAD /* Exceptions for "Tabula Sonora AU" folder in "Tabula Sonora AU" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+				README.md,
+			);
+			target = 0AD5D369302A9D42007ADFAD /* Tabula Sonora AU */;
+		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		0AD5D36B302A9D42007ADFAD /* Tabula Sonora AU */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				0AD5D398302A9D42007ADFAD /* Exceptions for "Tabula Sonora AU" folder in "Tabula Sonora AU" target */,
+			);
+			path = "Tabula Sonora AU";
+			sourceTree = "<group>";
+		};
 		0AE70C1E30258A96004ED9D6 /* Tabula Sonora Player */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
@@ -36,6 +77,12 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		0AD5D367302A9D42007ADFAD /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			files = (
+				0AD5D3A0302A9D42007ADFAD /* TabulaSonoraKit in Frameworks */,
+			);
+		};
 		0AE70C1930258A96004ED9D6 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			files = (
@@ -49,6 +96,7 @@
 			isa = PBXGroup;
 			children = (
 				0AE70C1E30258A96004ED9D6 /* Tabula Sonora Player */,
+				0AD5D36B302A9D42007ADFAD /* Tabula Sonora AU */,
 				0AE70C1D30258A96004ED9D6 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -57,6 +105,7 @@
 			isa = PBXGroup;
 			children = (
 				0AE70C1C30258A96004ED9D6 /* Tabula Sonora Player.app */,
+				0AD5D36A302A9D42007ADFAD /* Tabula Sonora AU.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -64,6 +113,27 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		0AD5D369302A9D42007ADFAD /* Tabula Sonora AU */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 0AD5D397302A9D42007ADFAD /* Build configuration list for PBXNativeTarget "Tabula Sonora AU" */;
+			buildPhases = (
+				0AD5D366302A9D42007ADFAD /* Sources */,
+				0AD5D367302A9D42007ADFAD /* Frameworks */,
+				0AD5D368302A9D42007ADFAD /* Resources */,
+			);
+			buildRules = (
+			);
+			fileSystemSynchronizedGroups = (
+				0AD5D36B302A9D42007ADFAD /* Tabula Sonora AU */,
+			);
+			name = "Tabula Sonora AU";
+			packageProductDependencies = (
+				0AD5D3A1302A9D42007ADFAD /* TabulaSonoraKit */,
+			);
+			productName = "Tabula Sonora AU";
+			productReference = 0AD5D36A302A9D42007ADFAD /* Tabula Sonora AU.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		0AE70C1B30258A96004ED9D6 /* Tabula Sonora Player */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 0AE70C2730258A97004ED9D6 /* Build configuration list for PBXNativeTarget "Tabula Sonora Player" */;
@@ -71,8 +141,12 @@
 				0AE70C1830258A96004ED9D6 /* Sources */,
 				0AE70C1930258A96004ED9D6 /* Frameworks */,
 				0AE70C1A30258A96004ED9D6 /* Resources */,
+				0AD5D394302A9D42007ADFAD /* Embed Foundation Extensions */,
 			);
 			buildRules = (
+			);
+			dependencies = (
+				0AD5D392302A9D42007ADFAD /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				0AE70C1E30258A96004ED9D6 /* Tabula Sonora Player */,
@@ -95,6 +169,9 @@
 				LastSwiftUpdateCheck = 2700;
 				LastUpgradeCheck = 2700;
 				TargetAttributes = {
+					0AD5D369302A9D42007ADFAD = {
+						CreatedOnToolsVersion = 27.0;
+					};
 					0AE70C1B30258A96004ED9D6 = {
 						CreatedOnToolsVersion = 27.0;
 					};
@@ -120,11 +197,17 @@
 			projectRoot = "";
 			targets = (
 				0AE70C1B30258A96004ED9D6 /* Tabula Sonora Player */,
+				0AD5D369302A9D42007ADFAD /* Tabula Sonora AU */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		0AD5D368302A9D42007ADFAD /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			files = (
+			);
+		};
 		0AE70C1A30258A96004ED9D6 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			files = (
@@ -133,6 +216,11 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		0AD5D366302A9D42007ADFAD /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			files = (
+			);
+		};
 		0AE70C1830258A96004ED9D6 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			files = (
@@ -140,7 +228,119 @@
 		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		0AD5D392302A9D42007ADFAD /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 0AD5D369302A9D42007ADFAD /* Tabula Sonora AU */;
+			targetProxy = 0AD5D391302A9D42007ADFAD /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin XCBuildConfiguration section */
+		0AD5D395302A9D42007ADFAD /* Debug configuration for PBXNativeTarget "Tabula Sonora AU" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_CXX_LANGUAGE_STANDARD = "c++20";
+				CLANG_CXX_LIBRARY = "libc++";
+				CODE_SIGN_ENTITLEMENTS = "Tabula Sonora AU/Tabula Sonora AU.entitlements";
+				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = "Tabula Sonora AU/Tabula Sonora AU-macOS.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 26;
+				DEVELOPMENT_TEAM = 8WHB6LKY28;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Tabula Sonora AU/Info.plist";
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/Packages/TabulaSonoraKit/Sources/TabulaSonoraBridge/include",
+				);
+				INFOPLIST_KEY_CFBundleDisplayName = "Tabula Sonora AU";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = "$(RECOMMENDED_IPHONEOS_DEPLOYMENT_TARGET)";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = "$(RECOMMENDED_MACOSX_DEPLOYMENT_TARGET)";
+				MARKETING_VERSION = 1.2.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "co.losno.Tabula-Sonora-Player.Tabula-Sonora-AU";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				SDKROOT = auto;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "Tabula Sonora AU/Common/Tabula_Sonora_AU-Bridging-Header.h";
+				SWIFT_OBJC_INTEROP_MODE = objcxx;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				XROS_DEPLOYMENT_TARGET = 27.0;
+			};
+			name = Debug;
+		};
+		0AD5D396302A9D42007ADFAD /* Release configuration for PBXNativeTarget "Tabula Sonora AU" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_CXX_LANGUAGE_STANDARD = "c++20";
+				CLANG_CXX_LIBRARY = "libc++";
+				CODE_SIGN_ENTITLEMENTS = "Tabula Sonora AU/Tabula Sonora AU.entitlements";
+				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = "Tabula Sonora AU/Tabula Sonora AU-macOS.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 26;
+				DEVELOPMENT_TEAM = 8WHB6LKY28;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Tabula Sonora AU/Info.plist";
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/Packages/TabulaSonoraKit/Sources/TabulaSonoraBridge/include",
+				);
+				INFOPLIST_KEY_CFBundleDisplayName = "Tabula Sonora AU";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = "$(RECOMMENDED_IPHONEOS_DEPLOYMENT_TARGET)";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = "$(RECOMMENDED_MACOSX_DEPLOYMENT_TARGET)";
+				MARKETING_VERSION = 1.2.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "co.losno.Tabula-Sonora-Player.Tabula-Sonora-AU";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				SDKROOT = auto;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "Tabula Sonora AU/Common/Tabula_Sonora_AU-Bridging-Header.h";
+				SWIFT_OBJC_INTEROP_MODE = objcxx;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				XROS_DEPLOYMENT_TARGET = 27.0;
+			};
+			name = Release;
+		};
 		0AE70C2530258A97004ED9D6 /* Debug configuration for PBXProject "Tabula Sonora Player" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -265,6 +465,8 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = ts;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
+				CODE_SIGN_ENTITLEMENTS = "Tabula Sonora Player/Tabula Sonora Player.entitlements";
+				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = "Tabula Sonora Player/Tabula Sonora Player-macOS.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 26;
 				DEVELOPMENT_TEAM = 8WHB6LKY28;
@@ -314,6 +516,8 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = ts;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
+				CODE_SIGN_ENTITLEMENTS = "Tabula Sonora Player/Tabula Sonora Player.entitlements";
+				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = "Tabula Sonora Player/Tabula Sonora Player-macOS.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 26;
 				DEVELOPMENT_TEAM = 8WHB6LKY28;
@@ -360,6 +564,14 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		0AD5D397302A9D42007ADFAD /* Build configuration list for PBXNativeTarget "Tabula Sonora AU" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				0AD5D395302A9D42007ADFAD /* Debug configuration for PBXNativeTarget "Tabula Sonora AU" */,
+				0AD5D396302A9D42007ADFAD /* Release configuration for PBXNativeTarget "Tabula Sonora AU" */,
+			);
+			defaultConfigurationName = Release;
+		};
 		0AE70C1730258A96004ED9D6 /* Build configuration list for PBXProject "Tabula Sonora Player" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -387,6 +599,10 @@
 
 /* Begin XCSwiftPackageProductDependency section */
 		0A71500100000000000000A2 /* TabulaSonoraKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = TabulaSonoraKit;
+		};
+		0AD5D3A1302A9D42007ADFAD /* TabulaSonoraKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = TabulaSonoraKit;
 		};
