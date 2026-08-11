@@ -148,6 +148,113 @@ struct InstrumentTests {
         #expect(render(instrument, blocks: 24, frames: 512) > 0.001)
     }
 
+    /// Every send off, for the two tests below that measure where a note went rather than how it
+    /// sounded. All Sound Off takes the voices but not the reverb behind them, and a tail ringing
+    /// under the next measurement is indistinguishable from a port that was supposed to be silent
+    /// and was not.
+    private static func silenceEffects(_ settings: inout TSEngineSettings) {
+        settings.reverb = false
+        settings.chorus = false
+        settings.delay = false
+        settings.efx = false
+    }
+
+    /// Silences one port's channel 1 and plays each port's channel 1 in turn.
+    ///
+    /// The returned row is the peak heard for each port played, so the port that was silenced is
+    /// the one entry in it that should be zero. `configured` and `played` are separate because the
+    /// folding test needs to play more ports than the engine has: the volumes may only be set on
+    /// ports that exist, or the very fold being measured would send one of them back to full.
+    private func peaksSilencing(_ silenced: Int32, on instrument: TSInstrument,
+                                configured: Int32, played: Int32) -> [Float] {
+        let handle = instrument.handle
+
+        // Channel 1 of every port, so nothing but the port distinguishes one message from the next.
+        for port in 0..<configured {
+            TSInstrumentSendChannel(handle, port, 0xB0, 7, port == silenced ? 0 : 100)
+        }
+
+        return (0..<played).map { played in
+            // All Sound Off everywhere first: a peak has to come from this note and not from the
+            // tail of the last one. It takes no controller with it -- that is CC#121 -- so the
+            // volumes set above survive it.
+            for port in 0..<configured {
+                TSInstrumentSendChannel(handle, port, 0xB0, 120, 0)
+            }
+            _ = render(instrument, blocks: 8, frames: 512)
+
+            // And measured after the settle, not across it: a silenced port reads as the tail of
+            // whatever sounded before it otherwise, and the test passes or fails on the order the
+            // ports happen to be played in.
+            let residue = render(instrument, blocks: 4, frames: 512)
+            #expect(residue < 0.001,
+                    "something was still sounding before port \(played) was played (\(residue))")
+
+            TSInstrumentSendChannel(handle, played, 0x90, 60, 100)
+            let peak = render(instrument, blocks: 24, frames: 512)
+            TSInstrumentSendChannel(handle, played, 0x80, 60, 0)
+            return peak
+        }
+    }
+
+    /// A port is its own sixteen parts, and the port number on a message is the only thing that says
+    /// which sixteen a message is for.
+    ///
+    /// This is what an Audio Unit's cable number buys: the framework hands `AUMIDIEvent.cable` to
+    /// the render block untouched, `TSInstrumentKernel` masks it to four and passes it here, and
+    /// four cables therefore reach 64 parts from one instance. Testing it by ear rather than by
+    /// bookkeeping -- turn one port's channel 1 down to nothing and play all four -- because the
+    /// failure being guarded against is every port quietly collapsing onto port A, and a collapse
+    /// looks perfectly healthy to anything that only asks whether a note sounded.
+    @Test(.enabled(if: romPath != nil))
+    func aPortNumberReachesItsOwnParts() throws {
+        let instrument = TSInstrument()
+        try instrument.loadROM(atPath: Self.romPath!, verifyFully: false)
+
+        var settings = TSEngineSettingsDefault()
+        settings.ports = 4
+        Self.silenceEffects(&settings)
+        instrument.apply(settings)
+        instrument.prepare(forSampleRate: 48_000, maximumFrames: 1024)
+
+        for silenced in Int32(0)..<4 {
+            let peaks = peaksSilencing(silenced, on: instrument, configured: 4, played: 4)
+
+            for played in Int32(0)..<4 where played != silenced {
+                #expect(peaks[Int(played)] > 0.001,
+                        "port \(played) went quiet when port \(silenced) was turned down")
+            }
+            #expect(peaks[Int(silenced)] < 0.001,
+                    "port \(silenced) sounded at \(peaks[Int(silenced)]) with its volume at zero")
+        }
+    }
+
+    /// A port past the configured count folds onto one that exists rather than going silent.
+    ///
+    /// The kernel relies on this: it masks a cable to four and hands the number over whatever the
+    /// `ports` setting is, because the engine folds with `port & (ports - 1)` exactly as the module
+    /// does with the sixteen USB cables it advertises over two ports of parts. Getting it wrong is
+    /// silent in the worst way -- a host with four ports wired up and half of them producing nothing.
+    @Test(.enabled(if: romPath != nil))
+    func aPortPastTheConfiguredCountFoldsOntoOneThatExists() throws {
+        let instrument = TSInstrument()
+        try instrument.loadROM(atPath: Self.romPath!, verifyFully: false)
+
+        var settings = TSEngineSettingsDefault()
+        settings.ports = 2
+        Self.silenceEffects(&settings)
+        instrument.apply(settings)
+        instrument.prepare(forSampleRate: 48_000, maximumFrames: 1024)
+
+        // Four ports played against a two-port engine: C folds onto A, D onto B.
+        let peaks = peaksSilencing(0, on: instrument, configured: 2, played: 4)
+
+        #expect(peaks[0] < 0.001, "port A sounded with its volume at zero")
+        #expect(peaks[2] < 0.001, "port C did not fold onto the silenced port A (\(peaks[2]))")
+        #expect(peaks[1] > 0.001, "port B went quiet")
+        #expect(peaks[3] > 0.001, "port D did not fold onto port B (\(peaks[3]))")
+    }
+
     /// Gain is the one setting a render block sets for itself, so it is the one that can be wrong
     /// without any control call being involved.
     @Test(.enabled(if: romPath != nil))

@@ -151,6 +151,13 @@ it did not pick.
   from `cfprefsd` on macOS and both processes then write the plist behind each other's backs.
 - A part is addressed as `port * 16 + channel`, 0–63 (`TS_MAX_PARTS`). `ports` is 1/2/4 → 16/32/64
   parts; the module itself has two.
+- **The port travels on the message, and in a plugin that means the cable.** There is no port-select
+  message to latch. `AUMIDIEvent.cable` arrives verbatim, 0–15, for channel voice and SysEx alike,
+  so the AU declares four cables and masks to four. But the two MIDI protocols do not translate the
+  port into one another: a legacy unit handed a `MIDIEventList` gets the *block's* `cable` argument
+  and not the group nibble, and a unit that adopts `MIDIEventList` loses `scheduleMIDIEventBlock`'s
+  cable entirely. Adopting the newer protocol would cost ports, not only SysEx reassembly — see
+  `Tabula Sonora AU/README.md`.
 - **A part's index is not the channel it hears.** Parts are matched by `rxChannel`, not indexed by
   it — GS can point several parts at one channel or detach one entirely. Label, ordering *and*
   listing all follow the receive channel: `Session::used_channels_` holds the channels the file

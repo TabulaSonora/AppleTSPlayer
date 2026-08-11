@@ -123,9 +123,17 @@ public class Tabula_Sonora_AUAudioUnit: AUAudioUnit, @unchecked Sendable {
 
     // MARK: - MIDI
 
-    /// Two cables, because the module has two ports and its second sixteen parts are unreachable
-    /// otherwise. `TSInstrumentKernel` maps a cable to a port.
-    public override var virtualMIDICableCount: Int { 2 }
+    /// Four cables, one per port, because a port is another sixteen parts and the cable is the only
+    /// thing that says which port a message is for. At the engine's largest setting that is all 64
+    /// parts of a four-port file reachable from one instance.
+    ///
+    /// Declared fixed rather than following the `ports` parameter. A host reads this when it builds
+    /// the instrument's MIDI inputs and has no reason to read it again, so a count that shrank when
+    /// someone chose 32 parts would leave a stale port on the host's side rather than a working one;
+    /// and the engine folds a port past the configured count onto one that exists anyway
+    /// (`port & (ports - 1)`), so the extra cables always land somewhere audible. The module itself
+    /// does the same thing more loudly, advertising all sixteen USB cables over two ports of parts.
+    public override var virtualMIDICableCount: Int { 4 }
 
     // MARK: - Rendering
 

@@ -26,6 +26,14 @@
 /// piece -- which is exactly the shape a module built around seven-bit controllers and GS bulk
 /// dumps wants. Adopting the newer protocol would mean reassembling six-byte fragments back into
 /// the messages the framework had already assembled.
+///
+/// It also costs nothing in ports, and adopting would: the two protocols do not translate their
+/// port number into one another. Measured, on macOS 27 -- a unit left legacy receives the host's
+/// `cable` verbatim through `scheduleMIDIEventBlock`, and when a host schedules a `MIDIEventList`
+/// instead the framework's conversion carries that block's own `cable` argument, *not* the group
+/// nibble inside each packet. A unit that adopts the protocol is the mirror image: the group
+/// survives, and a legacy `scheduleMIDIEventBlock` arrives on group 0 with the cable thrown away.
+/// So staying legacy is what keeps the ports reachable from the widest set of hosts.
 class TSInstrumentKernel {
 public:
     /// The engine to drive. From `TabulaSonoraKit.Instrument.handle`, which outlives the kernel.
@@ -81,14 +89,21 @@ public:
     }
 
 private:
-    /// The cable a host sent on, as one of the module's two ports.
+    /// The cable a host sent on, as one of the four ports the engine can back.
     ///
-    /// Ports are the module's own second sixteen channels, and a host that offers more than one
-    /// cable is the only way to reach them. Anything past the second folds onto it rather than
-    /// disappearing, which is what the engine does with a file tagged for four ports.
+    /// A port is another sixteen parts, and the cable is the only thing in a MIDI stream that says
+    /// which one a message is for -- exactly as it is on the hardware, where the port rides in the
+    /// USB-MIDI packet's cable nibble and nothing latches it between messages. The framework hands
+    /// the number over untouched: `AUMIDIEvent.cable` is whatever the host passed to
+    /// `scheduleMIDIEventBlock`, for a channel voice message and for a SysEx alike.
+    ///
+    /// Masked to four because that is the most parts `TS_MAX_PARTS` has room for. Folding rather
+    /// than dropping is what the module does with the twelve cables it advertises and cannot back,
+    /// and what the engine does again below this with a port past the configured count -- a stream
+    /// meant for port C on a two-port setting lands on port A rather than going silent.
     [[nodiscard]] static int portFor(const AUMIDIEvent &midi) noexcept
     {
-        return midi.cable & 0x01;
+        return midi.cable & 0x03;
     }
 
     void handleMIDI(const AUMIDIEvent &midi) noexcept

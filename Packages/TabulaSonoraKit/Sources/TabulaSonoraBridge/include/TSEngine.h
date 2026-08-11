@@ -424,7 +424,8 @@ extern uint32_t TSEngineRingRead(void *ringHandle, float *left, float *right, ui
 /// engine's 32 kHz. Fills silence when there is no ROM.
 extern void TSInstrumentRender(void *handle, float *left, float *right, uint32_t frames);
 
-/// One channel voice message. `port` is 0 or 1 -- the module has two.
+/// One channel voice message. `port` is 0 to 3, addressing the sixteen parts of one port; the
+/// engine folds a port past its configured count onto one that exists, so any value is safe.
 extern void TSInstrumentSendChannel(void *handle, int32_t port, int32_t status, int32_t data1,
                                     int32_t data2);
 
