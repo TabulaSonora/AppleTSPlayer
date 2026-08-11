@@ -8,12 +8,14 @@
 	  platform accepts the other's spelling. One target builds for both, so the entitlements file is
 	  chosen per SDK -- see CODE_SIGN_ENTITLEMENTS[sdk=macosx*].
 
-	  ROMStore.appGroup has the same pair, and the two must agree: the container is looked up by
-	  string at runtime and a mismatch is not a build error, only an app that cannot find its ROM.
+	  The domain comes from TS_APP_GROUP_DOMAIN in Xcode-config/Shared.xcconfig, because a group has
+	  to be registered to the team that signs it and a fork under another team needs its own. This
+	  is the only place the identifier is written: ROMStore reads it back out of the running
+	  process's entitlements rather than keeping a copy that could disagree with this one.
 	-->
 	<key>com.apple.security.application-groups</key>
 	<array>
-		<string>$(TeamIdentifierPrefix)group.co.losno.tabula-sonora</string>
+		<string>$(TeamIdentifierPrefix)group.$(TS_APP_GROUP_DOMAIN).tabula-sonora</string>
 	</array>
 </dict>
 </plist>

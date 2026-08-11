@@ -145,10 +145,19 @@ it did not pick.
 - **The ROM lives in the app group, and nowhere else.** `ROMStore` owns the path, the import and the
   `SCCore.dll.verified` marker beside it; `Library` only forwards. An extension is sandboxed into its
   own container, so a group is the only place both bundles can read one file. The identifier is
-  spelled differently per platform — `group.co.losno.tabula-sonora` on iOS, team-prefixed on macOS —
+  spelled differently per platform — `group.<domain>.tabula-sonora` on iOS, team-prefixed on macOS —
   which is why each target has two entitlements files and a `CODE_SIGN_ENTITLEMENTS[sdk=macosx*]`.
   The verified flag is a **file**, not a preference: `UserDefaults(suiteName:)` over a group detaches
   from `cfprefsd` on macOS and both processes then write the plist behind each other's backs.
+- **The team and the app group are build configuration, never source.** `DEVELOPMENT_TEAM` and
+  `TS_APP_GROUP_DOMAIN` come from `Xcode-config/Shared.xcconfig`, which defaults to upstream's and
+  includes a gitignored `Local.xcconfig` that overrides both — a group has to be registered to the
+  team that signs it, so a fork needs its own domain. The four entitlements files are the only place
+  the identifier is spelled; `ROMStore.appGroup` reads it back out of the running process's own
+  entitlements with `SecTaskCopyValueForEntitlement` rather than keeping a copy, because a copy that
+  disagreed would not be a build error, only a plugin that cannot find the ROM. Keep
+  `DEVELOPMENT_TEAM` out of `project.pbxproj` — a target-level setting beats the config file, and
+  Xcode writes one back whenever the Signing & Capabilities tab is touched.
 - A part is addressed as `port * 16 + channel`, 0–63 (`TS_MAX_PARTS`). `ports` is 1/2/4 → 16/32/64
   parts; the module itself has two.
 - **The port travels on the message, and in a plugin that means the cable.** There is no port-select

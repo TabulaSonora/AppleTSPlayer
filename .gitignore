@@ -10,6 +10,11 @@ build/
 Packages/*/.build/
 Packages/*/.swiftpm/
 
+# Who is signing this build, and the app group that follows from it. Whoever is not upstream needs
+# their own team and their own group domain, and neither is ever theirs to commit -- see
+# Xcode-config/Shared.xcconfig, which builds as upstream when this file is absent.
+Xcode-config/Local.xcconfig
+
 # macOS
 .DS_Store
 

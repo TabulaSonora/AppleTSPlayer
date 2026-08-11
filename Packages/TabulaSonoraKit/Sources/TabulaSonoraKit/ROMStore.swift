@@ -1,4 +1,5 @@
 import Foundation
+import Security
 
 /// The `SCCore.dll` on disk, in a container both the app and the plugin can reach.
 ///
@@ -12,18 +13,46 @@ import Foundation
 /// verified flag. It is also `nonisolated` on purpose -- the plugin loads the ROM off the main actor
 /// while its view is being built.
 public enum ROMStore {
-    /// The app group both bundles are entitled to.
+    /// The app group both bundles are entitled to, asked of this process's own code signature.
     ///
-    /// The two platforms spell this differently and neither accepts the other's spelling: iOS
-    /// requires the identifier to begin with `group.`, macOS requires it to begin with the team
-    /// identifier. The entitlement files are selected per SDK for the same reason.
-    public static let appGroup: String = {
+    /// Asked rather than written down, because writing it down is what goes wrong. The identifier
+    /// is spelled differently per platform and neither platform accepts the other's spelling -- iOS
+    /// wants it to begin with `group.`, macOS wants the team identifier in front of that -- so it
+    /// already appears in four entitlements files, and a fork signed by another team has to change
+    /// the domain in all of them (`TS_APP_GROUP_DOMAIN` in `Xcode-config/Shared.xcconfig`). A fifth
+    /// copy here, in Swift, would have to be edited to match and would be the one nothing checks: a
+    /// mismatch is not a build error, only an app whose plugin cannot find the ROM.
+    ///
+    /// The entitlement is what actually decides which container this process may open, so it is the
+    /// one spelling that cannot be wrong, and reading it back means the team and the domain live in
+    /// the build configuration alone.
+    public static let appGroup: String = entitledAppGroup() ?? defaultAppGroup
+
+    /// What upstream signs as, for a build with no entitlements to read -- a unit test, or a copy
+    /// whose signature did not survive. Neither can open a group container anyway; `romURL` falls
+    /// back to Application Support for both.
+    private static let defaultAppGroup: String = {
         #if os(macOS)
         "8WHB6LKY28.group.co.losno.tabula-sonora"
         #else
         "group.co.losno.tabula-sonora"
         #endif
     }()
+
+    /// The app group this bundle is entitled to, or nil if it is entitled to none.
+    ///
+    /// Matched by suffix rather than taken as the first: an entitlement may list more than one
+    /// group, and only this one is the ROM's.
+    private static func entitledAppGroup() -> String? {
+        guard let task = SecTaskCreateFromSelf(nil),
+              let entitlement = SecTaskCopyValueForEntitlement(
+                  task, "com.apple.security.application-groups" as CFString, nil),
+              let groups = entitlement as? [String]
+        else {
+            return nil
+        }
+        return groups.first { $0.hasSuffix(".tabula-sonora") }
+    }
 
     public static let fileName = "SCCore.dll"
 

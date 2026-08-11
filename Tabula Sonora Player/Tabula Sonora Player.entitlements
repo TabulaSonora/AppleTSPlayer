@@ -6,11 +6,12 @@
 	  The container the app and the Audio Unit share the ROM through. This is the iOS spelling, where
 	  the identifier must begin with "group."; the macOS file beside this one carries the same group
 	  under the team-prefixed name that platform requires, and is selected by
-	  CODE_SIGN_ENTITLEMENTS[sdk=macosx*]. ROMStore.appGroup holds both and must keep agreeing.
+	  CODE_SIGN_ENTITLEMENTS[sdk=macosx*]. The domain is TS_APP_GROUP_DOMAIN, from
+	  Xcode-config/Shared.xcconfig, so that a fork signed by another team can own its own group.
 	-->
 	<key>com.apple.security.application-groups</key>
 	<array>
-		<string>group.co.losno.tabula-sonora</string>
+		<string>group.$(TS_APP_GROUP_DOMAIN).tabula-sonora</string>
 	</array>
 </dict>
 </plist>

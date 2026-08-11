@@ -31,6 +31,14 @@ git clone --recurse-submodules https://github.com/TabulaSonora/AppleTSPlayer.git
 open "Tabula Sonora Player.xcodeproj"
 ```
 
+To build under your own Apple developer team, copy `Xcode-config/Local.template.xcconfig` to
+`Xcode-config/Local.xcconfig` and put your team identifier and a reverse-DNS domain you own in it.
+The app and the plugin share the ROM through an app group, and an app group belongs to the team that
+signs it, so the group's name follows from the team; both settings live in that one file, which is
+in `.gitignore`. Without it the project builds as upstream. Don't put a `DEVELOPMENT_TEAM` back into
+`project.pbxproj` — Xcode writes one there whenever the Signing & Capabilities tab is used, and it
+overrides the config file.
+
 The engine is compiled from source by SwiftPM — no CMake, no vcpkg. `Packages/TabulaSonoraKit`
 holds NativeTS as a submodule alongside an Objective-C++ bridge and the Swift API; see
 [its README](Packages/TabulaSonoraKit/README.md) for the two things that are easy to get wrong

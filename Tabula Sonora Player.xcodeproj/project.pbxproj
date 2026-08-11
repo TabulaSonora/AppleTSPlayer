@@ -35,6 +35,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		0ACF6001302B0001007ADFAD /* Shared.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Shared.xcconfig; sourceTree = "<group>"; };
+		0ACF6002302B0001007ADFAD /* Local.template.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Local.template.xcconfig; sourceTree = "<group>"; };
 		0AD5D36A302A9D42007ADFAD /* Tabula Sonora AU.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "Tabula Sonora AU.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
 		0AE70C1C30258A96004ED9D6 /* Tabula Sonora Player.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Tabula Sonora Player.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -97,8 +99,18 @@
 			children = (
 				0AE70C1E30258A96004ED9D6 /* Tabula Sonora Player */,
 				0AD5D36B302A9D42007ADFAD /* Tabula Sonora AU */,
+				0ACF6000302B0001007ADFAD /* Xcode-config */,
 				0AE70C1D30258A96004ED9D6 /* Products */,
 			);
+			sourceTree = "<group>";
+		};
+		0ACF6000302B0001007ADFAD /* Xcode-config */ = {
+			isa = PBXGroup;
+			children = (
+				0ACF6001302B0001007ADFAD /* Shared.xcconfig */,
+				0ACF6002302B0001007ADFAD /* Local.template.xcconfig */,
+			);
+			path = "Xcode-config";
 			sourceTree = "<group>";
 		};
 		0AE70C1D30258A96004ED9D6 /* Products */ = {
@@ -246,7 +258,6 @@
 				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = "Tabula Sonora AU/Tabula Sonora AU-macOS.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 29;
-				DEVELOPMENT_TEAM = 8WHB6LKY28;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
@@ -298,7 +309,6 @@
 				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = "Tabula Sonora AU/Tabula Sonora AU-macOS.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 29;
-				DEVELOPMENT_TEAM = 8WHB6LKY28;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
@@ -343,6 +353,7 @@
 		};
 		0AE70C2530258A97004ED9D6 /* Debug configuration for PBXProject "Tabula Sonora Player" */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 0ACF6001302B0001007ADFAD /* Shared.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
@@ -376,7 +387,6 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = dwarf;
-				DEVELOPMENT_TEAM = 8WHB6LKY28;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -406,6 +416,7 @@
 		};
 		0AE70C2630258A97004ED9D6 /* Release configuration for PBXProject "Tabula Sonora Player" */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 0ACF6001302B0001007ADFAD /* Shared.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
@@ -439,7 +450,6 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				DEVELOPMENT_TEAM = 8WHB6LKY28;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -469,7 +479,6 @@
 				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = "Tabula Sonora Player/Tabula Sonora Player-macOS.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 29;
-				DEVELOPMENT_TEAM = 8WHB6LKY28;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
@@ -520,7 +529,6 @@
 				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = "Tabula Sonora Player/Tabula Sonora Player-macOS.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 29;
-				DEVELOPMENT_TEAM = 8WHB6LKY28;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;

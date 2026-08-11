@@ -1,0 +1,15 @@
+// Local.template.xcconfig
+//
+// Copy to Local.xcconfig -- which is in .gitignore -- and fill both in to build under your own
+// team. Shared.xcconfig includes it if it is there and builds as upstream if it is not.
+//
+// The team identifier is on https://developer.apple.com/account under Membership. The domain is
+// whatever reverse-DNS name your team owns: it becomes the app group
+// `group.<domain>.tabula-sonora`, and an app group has to belong to the team that signs it, so
+// upstream's `co.losno` will not provision under anyone else's certificate.
+//
+// Nothing else belongs in here. If a build needs a second local-only setting, add it to this
+// template too, so the next person can see that it exists.
+
+DEVELOPMENT_TEAM = ABCDE12345
+TS_APP_GROUP_DOMAIN = net.example

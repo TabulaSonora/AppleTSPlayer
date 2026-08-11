@@ -8,7 +8,7 @@
 	-->
 	<key>com.apple.security.application-groups</key>
 	<array>
-		<string>group.co.losno.tabula-sonora</string>
+		<string>group.$(TS_APP_GROUP_DOMAIN).tabula-sonora</string>
 	</array>
 </dict>
 </plist>

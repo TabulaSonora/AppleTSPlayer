@@ -1,0 +1,31 @@
+// Shared.xcconfig
+//
+// The base configuration for both build configurations, and the one place a build says who is
+// signing it. Two things here differ between whoever is building and cannot be committed with a
+// local value in them:
+//
+//   DEVELOPMENT_TEAM        the certificate the app and its extension are signed with
+//   TS_APP_GROUP_DOMAIN     the reverse-DNS middle of the app group they share the ROM through
+//
+// The second follows the first because an app group has to be registered to the team that signs
+// it, so a fork signed by another team needs a group under a domain that team owns. Everything the
+// group identifier is spelled into -- four entitlements files -- reads it from here.
+//
+// To build under your own team, create Xcode-config/Local.xcconfig beside this file:
+//
+//     DEVELOPMENT_TEAM = ABCDE12345
+//     TS_APP_GROUP_DOMAIN = net.example
+//
+// It is in .gitignore and is meant to stay there. Copy Local.template.xcconfig to start.
+//
+// Keep DEVELOPMENT_TEAM *out* of project.pbxproj. A target-level setting beats a project-level one,
+// so a team left in the project file silently overrides this and the override is a committed local
+// value again -- which is the whole problem this file exists to solve. Xcode writes one back into
+// the project whenever the Signing & Capabilities tab is used, so check the diff after touching it.
+
+// Upstream's, and what a commit should build as.
+DEVELOPMENT_TEAM = 8WHB6LKY28
+TS_APP_GROUP_DOMAIN = co.losno
+
+// Anything above may be reassigned below; in an xcconfig the last assignment wins.
+#include? "Local.xcconfig"
