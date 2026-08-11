@@ -118,8 +118,12 @@ final class ObservableAUParameterGroup: ObservableAUParameterNode {
 @Observable
 final class ObservableAUParameter: ObservableAUParameterNode {
 
-    private weak var parameter: AUParameter?
-    private var observerToken: AUParameterObserverToken!
+    /// Both are written once in `init` and read from `deinit`, which is nonisolated and so may
+    /// not touch main-actor state. Removing the observer is exactly what has to happen there --
+    /// the parameter outlives this object and keeps every observer it was handed -- so the two
+    /// it needs step outside the isolation rather than the teardown being skipped.
+    private nonisolated(unsafe) weak var parameter: AUParameter?
+    private nonisolated(unsafe) var observerToken: AUParameterObserverToken!
     private var editingState: EditingState = .inactive
 
     let min: AUValue
@@ -139,11 +143,18 @@ final class ObservableAUParameter: ObservableAUParameterNode {
 
         /// Use the parameter.token(byAddingParameterObserver:) function to monitor for parameter
         /// changes from the host. The only role of this callback is to update the UI if the value is changed by the host.
-        self.observerToken = parameter.token { @Sendable (_ address: AUParameterAddress, _ auValue: AUValue) in
+        ///
+        /// Weakly, and removed again below. The parameter belongs to the audio unit's parameter
+        /// tree and holds every observer added to it for as long as the unit lives, so a strong
+        /// capture here pins this object -- and the whole observable tree it belongs to -- to the
+        /// unit. `observableParameterTree` builds a fresh tree on each access, so the observers
+        /// accumulate: one set per access, none of them ever going away.
+        self.observerToken = parameter.token { @Sendable [weak self] (_ address: AUParameterAddress, _ auValue: AUValue) in
 
             DispatchQueue.main.async {
+                guard let self else { return }
                 guard address == self.parameter?.address else { return }
-                
+
                 // Don't update the UI if the user is currently interacting
                 guard self.editingState == .inactive else { return }
 
@@ -151,6 +162,14 @@ final class ObservableAUParameter: ObservableAUParameterNode {
                 self.value = auValue
                 self.editingState = .inactive
             }
+        }
+    }
+
+    deinit {
+        // Nothing else removes it: the token is only a handle, and the parameter keeps the
+        // observer until it is told not to.
+        if let observerToken {
+            parameter?.removeParameterObserver(observerToken)
         }
     }
 

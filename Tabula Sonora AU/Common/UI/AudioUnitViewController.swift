@@ -15,7 +15,7 @@ private let log = Logger(subsystem: "co.losno.Tabula-Sonora-Player.Tabula-Sonora
 @MainActor
 public class AudioUnitViewController: AUViewController, AUAudioUnitFactory {
     var audioUnit: AUAudioUnit?
-    
+
     var hostingController: HostingController<Tabula_Sonora_AUMainView>?
     
     private var observation: NSKeyValueObservation?
@@ -49,6 +49,11 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory {
 	*/
 
 	deinit {
+		// The observation registers on the audio unit and is only torn down when it is
+		// invalidated or released. Doing it here rather than leaving it to ARC keeps the
+		// unit's observer list from outliving the controller that added to it.
+		observation?.invalidate()
+		observation = nil
 	}
 
     public override func viewDidLoad() {
@@ -64,13 +69,13 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory {
 	nonisolated public func createAudioUnit(with componentDescription: AudioComponentDescription) throws -> AUAudioUnit {
 		return try DispatchQueue.main.sync {
 			
-			audioUnit = try Tabula_Sonora_AUAudioUnit(componentDescription: componentDescription, options: [])
-			
-			guard let audioUnit = self.audioUnit as? Tabula_Sonora_AUAudioUnit else {
-				log.error("Unable to create Tabula_Sonora_AUAudioUnit")
-				return audioUnit!
-			}
-			
+			// Bound once and used from here down, rather than stored and then read back out
+			// through a conditional cast that could only fail by force-unwrapping the same
+			// property it had just failed to cast.
+			let audioUnit = try Tabula_Sonora_AUAudioUnit(componentDescription: componentDescription,
+			                                              options: [])
+			self.audioUnit = audioUnit
+
 			defer {
 				// Configure the SwiftUI view after creating the AU, instead of in viewDidLoad,
 				// so that the parameter tree is set up before we build our @AUParameterUI properties
@@ -78,12 +83,15 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory {
 					self.configureSwiftUIView(audioUnit: audioUnit)
 				}
 			}
-			
+
 			audioUnit.setupParameterTree(Tabula_Sonora_AUParameterSpecs.createAUParameterTree())
-			
-			self.observation = audioUnit.observe(\.allParameterValues, options: [.new]) { object, change in
-				guard let tree = audioUnit.parameterTree else { return }
-				
+
+			// The observed object rather than the captured `audioUnit`: the observation belongs
+			// to this controller and the closure to the observation, so capturing the unit here
+			// would give the controller a second hold on it that outlives the host's own.
+			self.observation = audioUnit.observe(\.allParameterValues, options: [.new]) { observed, change in
+				guard let tree = observed.parameterTree else { return }
+
 				// This insures the Audio Unit gets initial values from the host.
 				for param in tree.allParameters { param.value = param.value }
 			}
