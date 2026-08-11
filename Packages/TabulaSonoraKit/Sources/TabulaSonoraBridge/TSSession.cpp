@@ -264,6 +264,16 @@ int Session::active_voices() const noexcept
     return engine_ ? engine_->active_voices() : 0;
 }
 
+int Session::voice_capacity() const noexcept
+{
+    return engine_ ? engine_->voice_slots() : 0;
+}
+
+bool Session::xg_mode() const noexcept
+{
+    return engine_ && engine_->xg_mode();
+}
+
 void Session::send_channel(int port, int status, int data1, int data2)
 {
     if (engine_) {
@@ -316,11 +326,11 @@ void Session::capture(SessionSnapshot& into) const
         return;
     }
 
-    into.activeVoices = engine_->active_voices();
-    into.voiceCapacity = engine_->voice_slots();
+    into.activeVoices = active_voices();
+    into.voiceCapacity = voice_capacity();
     into.noteCount = engine_->note_count();
     into.drumKit = engine_->drum_kit();
-    into.xgMode = engine_->xg_mode();
+    into.xgMode = xg_mode();
 
     // The engine's own part count, not the mask's: `ChannelMask` is 64 wide because a four-port
     // engine has that many parts to mute, but asking this engine for one past its own reads memory

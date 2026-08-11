@@ -34,6 +34,7 @@ public class Tabula_Sonora_AUAudioUnit: AUAudioUnit, @unchecked Sendable {
 
     private let state = NSLock()
     private var _romFailure: String?
+    private var isLoadingROM = false
 
     /// Why there is no sound, in the engine's own words, or nil while there is.
     ///
@@ -73,8 +74,22 @@ public class Tabula_Sonora_AUAudioUnit: AUAudioUnit, @unchecked Sendable {
     /// reads and parses 27 MB. Until it finishes the render block produces silence, which is also
     /// what the panel says is happening.
     private func loadROM() {
+        // One at a time. Each attempt builds a whole second session before swapping it in, so two
+        // at once would hold two sets of the engine's 27 MB of tables to no purpose -- and the
+        // "Look again" button in the panel is exactly the thing that invites a second attempt while
+        // the first is still reading.
+        state.lock()
+        if isLoadingROM {
+            state.unlock()
+            return
+        }
+        isLoadingROM = true
+        state.unlock()
+
         let instrument = self.instrument
         Task.detached(priority: .userInitiated) { [weak self] in
+            defer { self?.state.withLock { self?.isLoadingROM = false } }
+
             do {
                 try instrument.loadSharedROM()
                 self?.romFailure = nil

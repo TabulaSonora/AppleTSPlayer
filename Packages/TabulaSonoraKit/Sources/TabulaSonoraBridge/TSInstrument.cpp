@@ -61,6 +61,7 @@ void Instrument::load_rom(const std::string& path, bool verify_fully)
         const std::lock_guard<std::mutex> guard{lock_};
         previous = std::move(session_);
         session_ = std::move(next);
+        has_rom_.store(session_->has_rom(), std::memory_order_relaxed);
     }
     // Outside the lock: freeing the outgoing tables is the same 27 MB going the other way.
 }
@@ -84,20 +85,6 @@ std::string Instrument::rom_name() const
 {
     const std::lock_guard<std::mutex> guard{lock_};
     return session_->rom_name();
-}
-
-bool Instrument::has_rom() const
-{
-    const std::lock_guard<std::mutex> guard{lock_};
-    return session_->has_rom();
-}
-
-SessionSnapshot Instrument::snapshot() const
-{
-    SessionSnapshot snapshot;
-    const std::lock_guard<std::mutex> guard{lock_};
-    session_->capture(snapshot);
-    return snapshot;
 }
 
 void Instrument::prepare(double output_rate, std::uint32_t max_frames)
@@ -188,6 +175,11 @@ void Instrument::render(float* left, float* right, std::uint32_t frames) noexcep
         left[frame] = interpolate(input_left_.data() + index - 1, fraction);
         right[frame] = interpolate(input_right_.data() + index - 1, fraction);
     }
+
+    // What the panel shows, published rather than asked for -- see the comment on `has_rom`.
+    voices_.store(session_->active_voices(), std::memory_order_relaxed);
+    capacity_.store(session_->voice_capacity(), std::memory_order_relaxed);
+    xg_.store(session_->xg_mode(), std::memory_order_relaxed);
 
     // Carry the three frames straddling the next read position to the front, and bring the position
     // back into [1, 2) with them, so the buffer never has to be longer than one block.

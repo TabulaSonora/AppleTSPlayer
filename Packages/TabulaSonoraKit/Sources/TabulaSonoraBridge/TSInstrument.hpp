@@ -62,12 +62,25 @@ public:
     [[nodiscard]] TSEngineSettings settings() const;
 
     [[nodiscard]] std::string rom_name() const;
-    [[nodiscard]] bool has_rom() const;
 
-    /// Everything the panel draws, taken under the lock rather than published from the render
-    /// thread: there is no render thread here to publish it, and a plugin's UI asks ten times a
-    /// second while its audio thread holds the lock for microseconds at a time.
-    [[nodiscard]] SessionSnapshot snapshot() const;
+    // -- What the panel draws. Atomics, and deliberately not a `SessionSnapshot`. --
+    //
+    // A full capture walks the voice pool and builds a name for every part, which is tens of
+    // microseconds under the lock -- and the render block's `try_lock` fails for every one of them.
+    // A panel polling ten times a second would therefore punch a block of silence into the audio at
+    // ten times a second. So the render block publishes the few numbers a plugin's panel actually
+    // shows, and the panel reads them without taking anything.
+
+    [[nodiscard]] bool has_rom() const noexcept { return has_rom_.load(std::memory_order_relaxed); }
+    [[nodiscard]] int active_voices() const noexcept
+    {
+        return voices_.load(std::memory_order_relaxed);
+    }
+    [[nodiscard]] int voice_capacity() const noexcept
+    {
+        return capacity_.load(std::memory_order_relaxed);
+    }
+    [[nodiscard]] bool xg_mode() const noexcept { return xg_.load(std::memory_order_relaxed); }
 
     /// Sizes every buffer for a rate and a maximum block, and resets the resampler.
     ///
@@ -127,6 +140,13 @@ private:
 
     std::atomic<double> gain_{1.0};
     std::atomic<bool> gain_changed_{false};
+
+    /// Published by the render block, read by the panel. Stale between blocks and that is all a
+    /// display needs -- a host renders continuously, so "stale" means a few milliseconds.
+    std::atomic<bool> has_rom_{false};
+    std::atomic<int> voices_{0};
+    std::atomic<int> capacity_{0};
+    std::atomic<bool> xg_{false};
 };
 
 } // namespace ts::apple

@@ -176,10 +176,9 @@ struct Tabula_Sonora_AUMainView: View {
                 failure = audioUnit.instrument.hasROM ? nil
                     : (audioUnit.romFailure ?? String(localized: "Loading the Sound Canvas ROM…"))
 
-                let snapshot = audioUnit.instrument.snapshot()
-                voices = snapshot.activeVoices
-                capacity = snapshot.voiceCapacity
-                isXG = snapshot.isXGMode
+                voices = audioUnit.instrument.activeVoices
+                capacity = audioUnit.instrument.voiceCapacity
+                isXG = audioUnit.instrument.isXGMode
             }
 
             try? await Task.sleep(for: .milliseconds(100))

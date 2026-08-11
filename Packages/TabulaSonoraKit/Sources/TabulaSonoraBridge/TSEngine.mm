@@ -527,6 +527,21 @@ void fill_error(NSError **error, TSEngineError code, const std::string &message)
     return _instrument->has_rom();
 }
 
+- (NSInteger)activeVoices
+{
+    return _instrument->active_voices();
+}
+
+- (NSInteger)voiceCapacity
+{
+    return _instrument->voice_capacity();
+}
+
+- (BOOL)isXGMode
+{
+    return _instrument->xg_mode();
+}
+
 - (void)applySettings:(TSEngineSettings)settings
 {
     _instrument->set_settings(settings);
@@ -540,11 +555,6 @@ void fill_error(NSError **error, TSEngineError code, const std::string &message)
 - (double)latencySeconds
 {
     return _instrument->latency_seconds();
-}
-
-- (TSSnapshot *)snapshot
-{
-    return [[TSSnapshot alloc] initWithSnapshot:_instrument->snapshot()];
 }
 
 - (void *)handle

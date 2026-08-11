@@ -365,6 +365,17 @@ typedef NS_ENUM(NSInteger, TSSongVintage) {
 @property (nonatomic, readonly, nullable) NSString *romName;
 @property (nonatomic, readonly) BOOL hasROM;
 
+/// What a panel shows, and all of it.
+///
+/// Published by the render block into atomics rather than captured on demand: a whole
+/// `TSSnapshot` walks the voice pool and names every part, which is far too much to hold the
+/// engine's lock for while the same lock is what the render block is trying to take. A panel
+/// polling ten times a second for it would punch a block of silence into the audio ten times a
+/// second. These three cost a load each and take nothing.
+@property (nonatomic, readonly) NSInteger activeVoices;
+@property (nonatomic, readonly) NSInteger voiceCapacity;
+@property (nonatomic, readonly, getter=isXGMode) BOOL XGMode;
+
 /// Rebuilds the generator unless only the gain moved. Costs the sounding voices, as it does in the
 /// app, and one block of silence while it happens.
 - (void)applySettings:(TSEngineSettings)settings;
@@ -377,8 +388,6 @@ typedef NS_ENUM(NSInteger, TSSongVintage) {
 
 /// The delay to report to the host: the one input frame the interpolator looks ahead by.
 @property (nonatomic, readonly) double latencySeconds;
-
-- (TSSnapshot *)snapshot;
 
 /// Pass to the C functions below. Valid for this object's lifetime.
 @property (nonatomic, readonly) void *handle NS_RETURNS_INNER_POINTER;

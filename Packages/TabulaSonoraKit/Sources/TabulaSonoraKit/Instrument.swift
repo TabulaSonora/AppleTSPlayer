@@ -1,27 +1,6 @@
 import Foundation
 import TabulaSonoraBridge
 
-/// What a plugin's panel draws, taken from the engine in one look.
-///
-/// A value, not an observable object: the Audio Unit's view builds its own state around this at
-/// whatever rate it likes, and the audio unit itself has no view for most of its life.
-public struct InstrumentSnapshot: Sendable {
-    public let activeVoices: Int
-    public let voiceCapacity: Int
-    /// Whether the engine is in XG mode right now -- a bulk dump switches this under the plugin.
-    public let isXGMode: Bool
-    /// Every part the engine has ports for. Unlike the player's, none of these is marked present:
-    /// presence is a property of a loaded song, and a plugin never has one.
-    public let parts: [PartState]
-
-    init(_ snapshot: TSSnapshot) {
-        activeVoices = snapshot.activeVoices
-        voiceCapacity = snapshot.voiceCapacity
-        isXGMode = snapshot.xgMode
-        parts = snapshot.parts.map(PartState.init)
-    }
-}
-
 /// Why an instrument has nothing to play.
 public enum InstrumentFailure: Error {
     /// No `SCCore.dll` in the shared container. The app has to import one first; a plugin cannot,
@@ -96,7 +75,18 @@ public final class Instrument: @unchecked Sendable {
         return stored
     }
 
-    public func snapshot() -> InstrumentSnapshot {
-        InstrumentSnapshot(engine.snapshot())
-    }
+    // MARK: What the panel draws
+
+    /// Published by the render block into atomics, so reading them takes no lock at all.
+    ///
+    /// The player's full `SessionSnapshot` is deliberately not offered here. It names every part,
+    /// which means walking the voice pool and building strings under the engine's lock -- and here
+    /// that lock is the one the audio thread is trying to take, so a panel polling for it would put
+    /// a block of silence into the audio ten times a second. A plugin has no mixer to draw anyway:
+    /// the parts a mixer shows are a property of a loaded song, and there is never one here.
+    public var activeVoices: Int { engine.activeVoices }
+    public var voiceCapacity: Int { engine.voiceCapacity }
+
+    /// Whether the engine is in XG mode right now -- a bulk dump switches this under the plugin.
+    public var isXGMode: Bool { engine.isXGMode }
 }

@@ -203,6 +203,14 @@ public:
     /// render -- a held chord, or the tail of one -- rather than going to sleep on top of it.
     [[nodiscard]] int active_voices() const noexcept;
 
+    /// Voices the generator was built with, and whether it is in XG mode right now.
+    ///
+    /// Beside `active_voices` and apart from `capture` because a plugin's panel wants these three
+    /// numbers and nothing else: a whole capture walks the voice pool and names every part, which is
+    /// far too much to hold a lock for on the thread that is also rendering.
+    [[nodiscard]] int voice_capacity() const noexcept;
+    [[nodiscard]] bool xg_mode() const noexcept;
+
     /// One channel voice message on a port -- live MIDI and the on-screen keyboard.
     void send_channel(int port, int status, int data1, int data2);
 
