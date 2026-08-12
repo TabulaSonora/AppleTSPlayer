@@ -262,6 +262,14 @@ public:
     static void run_export(const ExportPlan& plan, const std::string& path,
                            const std::function<bool(double)>& progress);
 
+    /// What the generator's event pipeline delays a message by, in engine frames.
+    ///
+    /// The module stages an arriving message for four one-millisecond chunks before a part hears
+    /// it, and this engine models that -- so it is real latency, on top of whatever the caller's
+    /// own resampling costs. Derived from the option rather than written down, so that turning the
+    /// staging off does not leave a plugin declaring a delay it no longer has.
+    [[nodiscard]] int event_latency_frames() const;
+
     /// The rate the host is asking for, for the generator to stamp live messages against.
     ///
     /// Only a plugin has one to give: the app connects its graph at the engine's own rate. Setting

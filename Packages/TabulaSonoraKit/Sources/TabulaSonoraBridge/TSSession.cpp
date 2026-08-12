@@ -463,6 +463,13 @@ void Session::run_export(const ExportPlan& plan, const std::string& path,
     wav::write(path, left, right, sample_rate);
 }
 
+int Session::event_latency_frames() const
+{
+    // `event_delay_blocks` counts one-millisecond chunks, which is what `block_grid` is: 32 frames
+    // at the engine's 32 kHz, and emphatically not the 320-frame control block.
+    return options().event_delay_blocks * smf::block_grid;
+}
+
 void Session::set_host_rate(int host_rate)
 {
     if (host_rate == host_rate_) {

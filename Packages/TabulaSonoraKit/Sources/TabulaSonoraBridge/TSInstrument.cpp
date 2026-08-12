@@ -81,6 +81,7 @@ void Instrument::set_settings(const TSEngineSettings& settings)
     settings_ = settings;
     extended_output_.store(settings.extendedOutputResampler, std::memory_order_relaxed);
     session_->set_settings(settings);
+    event_frames_.store(session_->event_latency_frames(), std::memory_order_relaxed);
     gain_.store(settings.outputGain, std::memory_order_relaxed);
     gain_changed_.store(false, std::memory_order_release);
 }
@@ -122,6 +123,7 @@ void Instrument::prepare(double output_rate, std::uint32_t max_frames)
     filter_primed_ = false;
 
     session_->set_host_rate(static_cast<int>(output_rate_));
+    event_frames_.store(session_->event_latency_frames(), std::memory_order_relaxed);
 }
 
 double Instrument::latency_seconds() const noexcept
@@ -142,8 +144,15 @@ double Instrument::latency_seconds() const noexcept
     //
     // Reported because an unreported delay is how a plugin drifts against a click, and the figure
     // was one frame for both until the two paths existed to be told apart.
-    const double frames = extended_output_.load(std::memory_order_relaxed) ? 5.0 : 2.0;
-    return frames / static_cast<double>(engine_rate);
+    const double resampler = extended_output_.load(std::memory_order_relaxed) ? 5.0 : 2.0;
+
+    // And the 128 as well, which no version of this declared. Both paths sit behind the module's
+    // event staging and so does the module, so a host that compensates for it puts this plugin
+    // where the hardware would be; leaving it out is what made a bounce land four milliseconds
+    // late against everything that was compensated.
+    const auto staged = static_cast<double>(event_frames_.load(std::memory_order_relaxed));
+
+    return (staged + resampler) / static_cast<double>(engine_rate);
 }
 
 void Instrument::pull(std::size_t offset, std::size_t frames)

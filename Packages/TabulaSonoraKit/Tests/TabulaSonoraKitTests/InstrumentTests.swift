@@ -223,9 +223,9 @@ struct InstrumentTests {
     /// frame for years and is neither path's real figure; both are measured here rather than
     /// asserted, by where a note's first sound actually lands.
     ///
-    /// The engine's own event pipeline sits under both -- four chunks of 32 frames, which no
-    /// version of this has ever reported -- so what is checked is the *difference* between the two
-    /// resamplers, which cancels it and needs no constant of its own.
+    /// Checked against the measurement outright, not merely between the two paths: the engine's
+    /// event staging is declared now too, so the reported figure is the whole delay and there is
+    /// nothing left for a difference to cancel.
     @Test(.enabled(if: romPath != nil))
     func theReportedLatencyIsTheLatencyThereIs() throws {
         /// The first output frame of a note, in engine frames, and what the plugin claims.
@@ -258,13 +258,15 @@ struct InstrumentTests {
         }
 
         for rate in [32_000.0, 44_100.0, 48_000.0] {
-            let hermite = try onset(extendedOutput: true, rate: rate)
-            let module = try onset(extendedOutput: false, rate: rate)
+            for extendedOutput in [true, false] {
+                let named = extendedOutput ? "Hermite" : "module"
+                let (measured, reported) = try onset(extendedOutput: extendedOutput, rate: rate)
 
-            let measured = hermite.measured - module.measured
-            let reported = hermite.reported - module.reported
-            #expect(abs(measured - reported) < 1.0,
-                    "at \(rate) Hz the two paths differ by \(measured) engine frames but report \(reported)")
+                // Within a frame: the onset is where the attack first crosses a threshold, which
+                // at a fractional ratio need not land on the same output frame every time.
+                #expect(abs(measured - reported) < 1.5,
+                        "\(named) at \(rate) Hz sounds after \(measured) engine frames but reports \(reported)")
+            }
         }
     }
 

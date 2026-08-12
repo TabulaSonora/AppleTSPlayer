@@ -165,6 +165,9 @@ private:
     /// host asks for the latency from its own thread, and the two paths cost different amounts.
     std::atomic<bool> extended_output_{true};
 
+    /// The generator's event staging, in engine frames, cached here for the same reason.
+    std::atomic<int> event_frames_{0};
+
     std::atomic<double> gain_{1.0};
     std::atomic<bool> gain_changed_{false};
 
