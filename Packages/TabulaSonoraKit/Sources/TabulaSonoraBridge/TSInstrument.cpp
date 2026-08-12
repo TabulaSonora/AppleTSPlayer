@@ -79,6 +79,7 @@ void Instrument::set_settings(const TSEngineSettings& settings)
 {
     const std::lock_guard<std::mutex> guard{lock_};
     settings_ = settings;
+    extended_output_.store(settings.extendedOutputResampler, std::memory_order_relaxed);
     session_->set_settings(settings);
     gain_.store(settings.outputGain, std::memory_order_relaxed);
     gain_changed_.store(false, std::memory_order_release);
@@ -125,10 +126,24 @@ void Instrument::prepare(double output_rate, std::uint32_t max_frames)
 
 double Instrument::latency_seconds() const noexcept
 {
-    // One input frame: the interpolator reads a frame ahead of the pair it sits between. Small
-    // enough to be a rounding error in any host, and reported because an unreported delay is how
-    // a plugin drifts against a click.
-    return 1.0 / static_cast<double>(engine_rate);
+    // What the resampler costs, and the two cost different amounts.
+    //
+    // Measured rather than derived, by where a note's first sound lands: render one note and find
+    // the first non-zero output frame, at 32, 44.1 and 48 kHz. In engine frames the answer is flat
+    // across the three -- 133 for the Hermite, 130 for the module's stage -- of which 128 is the
+    // engine's own event pipeline, four chunks of 32 that both paths sit behind and that this has
+    // never reported.
+    //
+    // So the Hermite is five frames and the module's stage two. The two are the priming frame the
+    // filter needs before it can interpolate at all, and the frame it reads behind: its output
+    // frame `n` is at input position `n * ratio - 1`, at every ratio. The Hermite's five are its
+    // four carried frames and the generator's own copy of the output filter, which runs at 1:1 in
+    // that mode and is a sample of delay.
+    //
+    // Reported because an unreported delay is how a plugin drifts against a click, and the figure
+    // was one frame for both until the two paths existed to be told apart.
+    const double frames = extended_output_.load(std::memory_order_relaxed) ? 5.0 : 2.0;
+    return frames / static_cast<double>(engine_rate);
 }
 
 void Instrument::pull(std::size_t offset, std::size_t frames)

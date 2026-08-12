@@ -216,6 +216,58 @@ struct InstrumentTests {
         }
     }
 
+    /// The latency the plugin reports is the latency it has.
+    ///
+    /// A host aligns the plugin against everything else by this number, so a wrong one is a track
+    /// that plays early or late against a click and nothing in the audio to show why. It was one
+    /// frame for years and is neither path's real figure; both are measured here rather than
+    /// asserted, by where a note's first sound actually lands.
+    ///
+    /// The engine's own event pipeline sits under both -- four chunks of 32 frames, which no
+    /// version of this has ever reported -- so what is checked is the *difference* between the two
+    /// resamplers, which cancels it and needs no constant of its own.
+    @Test(.enabled(if: romPath != nil))
+    func theReportedLatencyIsTheLatencyThereIs() throws {
+        /// The first output frame of a note, in engine frames, and what the plugin claims.
+        func onset(extendedOutput: Bool, rate: Double) throws -> (measured: Double, reported: Double) {
+            let instrument = TSInstrument()
+            try instrument.loadROM(atPath: Self.romPath!, verifyFully: false)
+
+            var settings = TSEngineSettingsDefault()
+            settings.extendedOutputResampler = extendedOutput
+            Self.silenceEffects(&settings)
+            instrument.apply(settings)
+            instrument.prepare(forSampleRate: rate, maximumFrames: 16_384)
+
+            TSInstrumentSendChannel(instrument.handle, 0, 0x90, 60, 100)
+
+            let frames = 16_384
+            var left = [Float](repeating: 0, count: frames)
+            var right = [Float](repeating: 0, count: frames)
+            left.withUnsafeMutableBufferPointer { l in
+                right.withUnsafeMutableBufferPointer { r in
+                    TSInstrumentRender(instrument.handle, l.baseAddress!, r.baseAddress!,
+                                       UInt32(frames))
+                }
+            }
+
+            let first = left.firstIndex { abs($0) > 1e-7 }
+            #expect(first != nil, "no sound at all at \(rate) Hz")
+            let engineFrames = Double(first ?? 0) * (32_000.0 / rate)
+            return (engineFrames, instrument.latencySeconds * 32_000.0)
+        }
+
+        for rate in [32_000.0, 44_100.0, 48_000.0] {
+            let hermite = try onset(extendedOutput: true, rate: rate)
+            let module = try onset(extendedOutput: false, rate: rate)
+
+            let measured = hermite.measured - module.measured
+            let reported = hermite.reported - module.reported
+            #expect(abs(measured - reported) < 1.0,
+                    "at \(rate) Hz the two paths differ by \(measured) engine frames but report \(reported)")
+        }
+    }
+
     /// Every send off, for the two tests below that measure where a note went rather than how it
     /// sounded. All Sound Off takes the voices but not the reverb behind them, and a tail ringing
     /// under the next measurement is indistinguishable from a port that was supposed to be silent
