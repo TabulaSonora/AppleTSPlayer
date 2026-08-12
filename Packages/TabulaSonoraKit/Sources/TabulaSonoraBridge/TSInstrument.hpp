@@ -112,6 +112,10 @@ private:
     /// could not be taken. Called only with the lock held.
     void pull(std::size_t offset, std::size_t frames);
 
+    /// The other half of `render`: the module's own output stage doing the conversion, rather than
+    /// this port's Hermite. Called with the lock held and the gain already applied.
+    void render_through_module(float* left, float* right, std::uint32_t frames) noexcept;
+
     std::unique_ptr<Session> session_;
 
     /// Guards `session_`. Taken with `try_lock` on the audio thread and never held there across
@@ -124,19 +128,38 @@ private:
     double ratio_ = 1.0;
     double output_rate_ = engine_rate;
 
-    /// Where in the input buffer the next output frame is read from, in [1, 2).
+    /// Where in the input buffer the next output frame is read from, in [1, 2].
     ///
-    /// One ahead of the buffer's start because the interpolator wants a frame either side of the
-    /// one it is between: indices 0, 1, 2 are the tail carried from the previous block, and the
-    /// fourth point it needs is the first frame of this one.
+    /// At least one, because the interpolator wants a frame either side of the one it is between
+    /// and so reads from `index - 1`. The carried tail is what it reads back into: indices 0 to 3
+    /// are the last four frames of the previous block, and where in them this call starts depends
+    /// on how far past a frame boundary the previous one ended.
     double position_ = 1.0;
 
     /// Interleaved-free: two planar buffers, because that is what the session renders into.
     std::vector<float> input_left_;
     std::vector<float> input_right_;
 
-    /// Frames of history carried between calls -- the three the interpolator needs behind it.
-    static constexpr std::size_t history = 3;
+    /// The module's own output stage, when it is the one converting.
+    ///
+    /// The same `ts::OutputFilter` the generator runs, driven here a frame at a time at the ratio
+    /// between the engine's rate and the host's -- which is the arrangement the original plugin
+    /// has, and the reason the generator's copy is bypassed while this one is in use.
+    ts::OutputFilter filter_;
+
+    /// Whether `filter_` has been given a frame yet. It interpolates between the last two inputs,
+    /// so it needs one before the first output frame can mean anything.
+    bool filter_primed_ = false;
+
+    /// Frames of history carried between calls.
+    ///
+    /// Four, not the three the interpolator reads behind it. The carried frames have to be the
+    /// *last* frames the engine produced, or the stream has a hole in it, and with only three
+    /// there are blocks where that cannot be arranged: when a block ends without the read position
+    /// crossing an input frame boundary, the last frame the interpolator needed is one further on
+    /// than the last frame that can be carried while keeping the next read position at or above 1.
+    /// The fourth frame is what reconciles the two. See `render`.
+    static constexpr std::size_t history = 4;
 
     std::atomic<double> gain_{1.0};
     std::atomic<bool> gain_changed_{false};

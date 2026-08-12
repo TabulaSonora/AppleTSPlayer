@@ -77,6 +77,8 @@ extension EngineSettings {
             efx = value > 0.5
         case .extendedResampler:
             extendedInterpolation = value > 0.5
+        case .extendedOutputResampler:
+            extendedOutputResampler = value > 0.5
         default:
             break
         }

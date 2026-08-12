@@ -58,6 +58,20 @@ typedef struct {
     /// needs, and what upstream's own gates use.
     bool extendedInterpolation;
 
+    /// Which resampler carries the engine's 32 kHz to the host's rate. A plugin setting: the app
+    /// connects its graph at the engine's rate and never converts, so nothing here reads it.
+    ///
+    /// `false` is the module's own output stage, `tg_output_filter` -- a half-sample allpass into a
+    /// linear interpolator, which is what shaped the sound of the original plugin at 44.1 and 48
+    /// kHz. `true` is a four-point Hermite of this port's own, wider and flatter, and not something
+    /// the hardware ever did.
+    ///
+    /// Only one of the two may run. The module's filter is also in the generator, where at 1:1 it
+    /// is a sample of delay and no more; when it is doing the conversion here instead, that copy is
+    /// bypassed, or the signal would pass through two allpass stages and neither would be the
+    /// module's arrangement.
+    bool extendedOutputResampler;
+
     /// Linear gain on the finished mix. Applied live, without a rebuild.
     double outputGain;
 } TSEngineSettings;

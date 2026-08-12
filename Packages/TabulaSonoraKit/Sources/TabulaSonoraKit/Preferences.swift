@@ -24,6 +24,7 @@ struct Preferences {
         static let delay = "engine.delay"
         static let efx = "engine.efx"
         static let extendedInterpolation = "engine.extendedInterpolation"
+        static let extendedOutputResampler = "engine.extendedOutputResampler"
         static let outputGain = "engine.outputGain"
         static let latency = "engine.latencyMilliseconds"
         static let looping = "transport.looping"
@@ -43,6 +44,9 @@ struct Preferences {
         if let value = defaults.object(forKey: Key.chorus) as? Bool { settings.chorus = value }
         if let value = defaults.object(forKey: Key.delay) as? Bool { settings.delay = value }
         if let value = defaults.object(forKey: Key.efx) as? Bool { settings.efx = value }
+        if let value = defaults.object(forKey: Key.extendedOutputResampler) as? Bool {
+            settings.extendedOutputResampler = value
+        }
         if let value = defaults.object(forKey: Key.extendedInterpolation) as? Bool {
             settings.extendedInterpolation = value
         }
@@ -67,6 +71,7 @@ struct Preferences {
         defaults.set(settings.delay, forKey: Key.delay)
         defaults.set(settings.efx, forKey: Key.efx)
         defaults.set(settings.extendedInterpolation, forKey: Key.extendedInterpolation)
+        defaults.set(settings.extendedOutputResampler, forKey: Key.extendedOutputResampler)
         defaults.set(settings.outputGain, forKey: Key.outputGain)
     }
 

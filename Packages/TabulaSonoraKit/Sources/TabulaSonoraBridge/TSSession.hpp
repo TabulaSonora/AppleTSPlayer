@@ -262,6 +262,13 @@ public:
     static void run_export(const ExportPlan& plan, const std::string& path,
                            const std::function<bool(double)>& progress);
 
+    /// The rate the host is asking for, for the generator to stamp live messages against.
+    ///
+    /// Only a plugin has one to give: the app connects its graph at the engine's own rate. Setting
+    /// it rebuilds, because it is a construction option, so it belongs with `prepare` rather than
+    /// with anything that happens per block.
+    void set_host_rate(int host_rate);
+
 private:
     [[nodiscard]] ToneGeneratorOptions options() const;
     void rebuild();
@@ -291,6 +298,9 @@ private:
     std::array<bool, TS_MAX_PARTS> used_channels_{};
 
     TSEngineSettings settings_ = TSEngineSettingsDefault();
+
+    /// Zero until a host says otherwise, which reads as the engine's own rate.
+    int host_rate_ = 0;
     ChannelMask channels_;
 };
 

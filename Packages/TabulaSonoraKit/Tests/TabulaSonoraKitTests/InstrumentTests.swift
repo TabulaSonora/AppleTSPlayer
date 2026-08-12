@@ -148,6 +148,74 @@ struct InstrumentTests {
         #expect(render(instrument, blocks: 24, frames: 512) > 0.001)
     }
 
+    /// The resampler consumes the engine's output as a stream, so how the host chops up its
+    /// requests must not change a sample of it.
+    ///
+    /// Two instruments, the same note, the same total number of frames -- one asked for it in a
+    /// single call, the other in blocks. Any difference is the resampler losing its place between
+    /// calls, and the way it did was to leave the last frame it had pulled uncarried whenever a
+    /// block happened to end without crossing an input frame boundary. At 44.1 kHz that is about a
+    /// quarter of blocks; the engine's stream lost a sample at each of them, which sounds like a
+    /// steady clicking under a sustained note. Nothing catches this by ear in the app, where the
+    /// graph runs at the engine's own rate and this code does not run at all.
+    ///
+    /// 44.1 kHz first because that is what a host is most likely to ask for, and 32 kHz is the one
+    /// rate that cannot show the fault -- at a ratio of exactly one, every block ends on a frame
+    /// boundary.
+    @Test(.enabled(if: romPath != nil), arguments: [44_100.0, 48_000.0, 88_200.0, 96_000.0, 32_000.0])
+    func blockingTheOutputChangesNothing(rate: Double) throws {
+        /// Renders `total` frames of one note, asking for `chunk` at a time.
+        func play(chunk: Int, total: Int, extendedOutput: Bool) throws -> [Float] {
+            let instrument = TSInstrument()
+            try instrument.loadROM(atPath: Self.romPath!, verifyFully: false)
+
+            var settings = TSEngineSettingsDefault()
+            settings.extendedOutputResampler = extendedOutput
+            instrument.apply(settings)
+
+            instrument.prepare(forSampleRate: rate, maximumFrames: UInt32(total))
+
+            TSInstrumentSendChannel(instrument.handle, 0, 0x90, 60, 100)
+
+            var out = [Float]()
+            var left = [Float](repeating: 0, count: chunk)
+            var right = [Float](repeating: 0, count: chunk)
+            var done = 0
+            while done < total {
+                let frames = min(chunk, total - done)
+                left.withUnsafeMutableBufferPointer { l in
+                    right.withUnsafeMutableBufferPointer { r in
+                        TSInstrumentRender(instrument.handle, l.baseAddress!, r.baseAddress!,
+                                           UInt32(frames))
+                    }
+                }
+                out.append(contentsOf: left[0..<frames])
+                done += frames
+            }
+            return out
+        }
+
+        let total = 8192
+
+        // Both resamplers: the port's Hermite and the module's own output stage, which a plugin
+        // can be switched between and which have entirely separate bookkeeping between calls.
+        for extendedOutput in [true, false] {
+            let named = extendedOutput ? "Hermite" : "module"
+            let whole = try play(chunk: total, total: total, extendedOutput: extendedOutput)
+            #expect(whole.contains { abs($0) > 0.001 }, "\(named) at \(rate) Hz made no sound")
+
+            // Block sizes a host actually uses, and two that are not multiples of anything.
+            for chunk in [512, 1024, 64, 111, 480] {
+                let pieces = try play(chunk: chunk, total: total, extendedOutput: extendedOutput)
+                #expect(pieces.count == whole.count)
+
+                let worst = zip(whole, pieces).map { abs($0 - $1) }.max() ?? 0
+                #expect(worst < 1e-6,
+                        "\(named) at \(rate) Hz in \(chunk)-frame blocks differs from one call by \(worst)")
+            }
+        }
+    }
+
     /// Every send off, for the two tests below that measure where a note went rather than how it
     /// sounded. All Sound Off takes the voices but not the reverb behind them, and a tail ringing
     /// under the next measurement is indistinguishable from a port that was supposed to be silent

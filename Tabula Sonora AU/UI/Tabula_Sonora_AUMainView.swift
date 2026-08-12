@@ -108,6 +108,10 @@ struct Tabula_Sonora_AUMainView: View {
             toggle(String(localized: "Extended resampler"),
                    parameter: parameterTree.voice.extendedResampler)
                 .help("A wider kernel, and no ceiling on how fast a wave is read. Off is the module.")
+
+            toggle(String(localized: "Extended output resampler"),
+                   parameter: parameterTree.voice.extendedOutputResampler)
+                .help("How the engine's 32 kHz reaches this host's rate. Off is the module's own.")
         }
     }
 

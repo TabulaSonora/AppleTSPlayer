@@ -22,6 +22,12 @@ extern "C" TSEngineSettings TSEngineSettingsDefault(void)
     settings.delay = defaults.delay;
     settings.efx = defaults.efx;
     settings.extendedInterpolation = defaults.extended_interpolation;
+
+    // The Hermite, which is what the plugin has been converting with and what the click fix was
+    // made against. The module's own stage is the reference and is one switch away; it is not the
+    // default only because it is the newer path of the two through the render loop.
+    settings.extendedOutputResampler = true;
+
     settings.outputGain = defaults.output_gain;
     return settings;
 }
@@ -153,7 +159,10 @@ void Session::set_settings(const TSEngineSettings& settings)
                             || settings.ports != settings_.ports || settings.reverb != settings_.reverb
                             || settings.chorus != settings_.chorus || settings.delay != settings_.delay
                             || settings.efx != settings_.efx
-                            || settings.extendedInterpolation != settings_.extendedInterpolation;
+                            || settings.extendedInterpolation != settings_.extendedInterpolation
+                            // Not itself a generator setting, but it decides whether the generator
+                            // runs its output stage, which is one.
+                            || settings.extendedOutputResampler != settings_.extendedOutputResampler;
 
     settings_ = settings;
 
@@ -454,6 +463,23 @@ void Session::run_export(const ExportPlan& plan, const std::string& path,
     wav::write(path, left, right, sample_rate);
 }
 
+void Session::set_host_rate(int host_rate)
+{
+    if (host_rate == host_rate_) {
+        return;
+    }
+    host_rate_ = host_rate;
+
+    // As `set_settings` does: with no ROM there is no generator to rebuild, and `rebuild` reads
+    // the tables through a `std::optional` that is not engaged until one is loaded. A plugin sets
+    // its rate before it has a ROM as a matter of course -- the constructor prepares at the
+    // engine's own rate, and the host prepares again long before the 27 MB has finished reading.
+    if (!engine_) {
+        return;
+    }
+    rebuild();
+}
+
 ToneGeneratorOptions Session::options() const
 {
     ToneGeneratorOptions options;
@@ -485,7 +511,17 @@ ToneGeneratorOptions Session::options() const
     // The cost is four milliseconds of latency on live MIDI, which the module also has, against a
     // uniform shift that is inaudible in playback.
     options.event_delay_blocks = 4;
-    options.bypass_output_filter = false;
+
+    // The module runs one output stage, at the ratio between its rate and the host's. Here it is
+    // the generator's copy, at 1:1, because the generator emits the engine's own 32 kHz -- unless
+    // something downstream is going to run the same filter to do a real conversion, in which case
+    // that one is the module's stage and this would be a second, spurious pass of it.
+    options.bypass_output_filter = !settings_.extendedOutputResampler;
+
+    // The rate a sample offset on a live message is read against, which the module turns into
+    // milliseconds as `offset * 1000 / host_sample_rate`. Left at the engine's own rate it would
+    // stamp a host running at 44.1 kHz nearly forty per cent early.
+    options.host_sample_rate = host_rate_ > 0 ? host_rate_ : ts::OutputFilter::engine_rate;
 
     return options;
 }

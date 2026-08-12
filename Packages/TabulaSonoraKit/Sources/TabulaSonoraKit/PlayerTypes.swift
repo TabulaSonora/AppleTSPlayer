@@ -50,6 +50,13 @@ public struct EngineSettings: Equatable, Sendable {
     /// Off is the module as it is, ceiling and all.
     public var extendedInterpolation: Bool
 
+    /// Which resampler carries the engine's rate to the host's. Plugin only -- the app connects
+    /// its graph at the engine's rate and never converts, so nothing reads this there.
+    ///
+    /// `false` is the module's own output stage, the allpass into a linear interpolator that
+    /// shaped the original plugin off 1:1. `true` is this port's wider four-point Hermite.
+    public var extendedOutputResampler: Bool
+
     /// Linear gain on the finished mix. Applied live, without a rebuild.
     public var outputGain: Double
 
@@ -73,6 +80,7 @@ public struct EngineSettings: Equatable, Sendable {
         delay = settings.delay
         efx = settings.efx
         extendedInterpolation = settings.extendedInterpolation
+        extendedOutputResampler = settings.extendedOutputResampler
         outputGain = settings.outputGain
     }
 
@@ -85,6 +93,7 @@ public struct EngineSettings: Equatable, Sendable {
                          delay: delay,
                          efx: efx,
                          extendedInterpolation: extendedInterpolation,
+                         extendedOutputResampler: extendedOutputResampler,
                          outputGain: outputGain)
     }
 }

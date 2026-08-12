@@ -27,4 +27,5 @@ typedef NS_ENUM(AUParameterAddress, Tabula_Sonora_AUParameterAddress) {
     delayEffect,
     insertionEffects,
     extendedResampler,
+    extendedOutputResampler,
 };

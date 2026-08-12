@@ -53,6 +53,19 @@ let Tabula_Sonora_AUParameterSpecs = ParameterTreeSpec {
             valueRange: 0...1,
             defaultValue: 1
         )
+
+        // The other resampler, and the only one the app has no use for: it plays at the engine's
+        // own rate and lets CoreAudio convert, where a plugin has to do it here. Off is the
+        // module's own output stage doing the conversion, which is what the original plugin
+        // sounded like at any rate but 32 kHz.
+        ParameterSpec(
+            address: .extendedOutputResampler,
+            identifier: "extendedOutputResampler",
+            name: String(localized: "Extended output resampler"),
+            units: .boolean,
+            valueRange: 0...1,
+            defaultValue: 1
+        )
     }
 
     ParameterGroupSpec(identifier: "effects", name: String(localized: "Effects")) {

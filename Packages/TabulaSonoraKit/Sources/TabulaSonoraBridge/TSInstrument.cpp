@@ -47,13 +47,22 @@ void Instrument::load_rom(const std::string& path, bool verify_fully)
     // them are the entire cost of this call, and holding the render thread out for it would be
     // heard as the plugin dying at the moment it was inserted.
     TSEngineSettings wanted;
+    int rate = 0;
     {
         const std::lock_guard<std::mutex> guard{lock_};
         wanted = settings_;
+        rate = static_cast<int>(output_rate_);
     }
 
     auto next = std::make_unique<Session>();
     next->set_settings(wanted);
+
+    // Carried onto the new session, which starts at the engine's own rate and would otherwise
+    // stamp live messages against it. A host prepares long before the tables have finished
+    // reading, so by the time this runs the rate is known and the session that will answer for it
+    // does not exist yet.
+    next->set_host_rate(rate);
+
     next->load_rom(path, verify_fully);
 
     std::unique_ptr<Session> previous;
@@ -103,6 +112,15 @@ void Instrument::prepare(double output_rate, std::uint32_t max_frames)
     input_left_.assign(capacity, 0.0F);
     input_right_.assign(capacity, 0.0F);
     position_ = 1.0;
+
+    // The module's stage, for when it is the one converting, and the rate the generator stamps
+    // live messages against. Both are construction-time facts, which is why they are set here and
+    // not per block; `set_host_rate` rebuilds the generator when the rate actually moves.
+    filter_.set_host_rate(static_cast<int>(output_rate_));
+    filter_.reset();
+    filter_primed_ = false;
+
+    session_->set_host_rate(static_cast<int>(output_rate_));
 }
 
 double Instrument::latency_seconds() const noexcept
@@ -123,6 +141,39 @@ void Instrument::pull(std::size_t offset, std::size_t frames)
     // would step a transport that does not exist.
     session_->render_live(std::span<float>{input_left_.data() + offset, frames},
                           std::span<float>{input_right_.data() + offset, frames});
+}
+
+void Instrument::render_through_module(float* left, float* right, std::uint32_t frames) noexcept
+{
+    // The module's arrangement: one output stage, running at the ratio between the engine's rate
+    // and the host's, pulling a 32 kHz frame whenever the phase says it needs one. The generator's
+    // own copy of this filter is bypassed while this runs -- see `Session::options`.
+    //
+    // Input comes a frame at a time rather than a block at a time, which is not how the generator
+    // likes to be asked, so it is pulled into the front of the same buffer the Hermite path uses.
+    // A frame costs a call into the session; the alternative is a second buffer and a count of
+    // what is left in it, and this path exists to be compared against the module rather than to be
+    // the fast one.
+    for (std::uint32_t frame = 0; frame < frames; ++frame) {
+        if (!filter_primed_) {
+            pull(0, 1);
+            filter_.push(input_left_[0], input_right_[0]);
+            filter_primed_ = true;
+        }
+
+        const auto [out_left, out_right] = filter_.at();
+        left[frame] = out_left;
+        right[frame] = out_right;
+
+        for (int wanted = filter_.advance(); wanted > 0; --wanted) {
+            pull(0, 1);
+            filter_.push(input_left_[0], input_right_[0]);
+        }
+    }
+
+    voices_.store(session_->active_voices(), std::memory_order_relaxed);
+    capacity_.store(session_->voice_capacity(), std::memory_order_relaxed);
+    xg_.store(session_->xg_mode(), std::memory_order_relaxed);
 }
 
 void Instrument::render(float* left, float* right, std::uint32_t frames) noexcept
@@ -148,15 +199,20 @@ void Instrument::render(float* left, float* right, std::uint32_t frames) noexcep
         session_->set_output_gain(gain_.load(std::memory_order_relaxed));
     }
 
+    if (!settings_.extendedOutputResampler) {
+        render_through_module(left, right, frames);
+        return;
+    }
+
     const double last = position_ + (static_cast<double>(frames - 1) * ratio_);
     const double end = position_ + (static_cast<double>(frames) * ratio_);
 
-    // Two demands on the input, and the larger wins: the last output frame interpolates between
-    // `last` and the frame after it, and the tail carried into the next call starts one frame
-    // before `end`.
-    const std::size_t highest = std::max(static_cast<std::size_t>(last) + 2,
-                                         static_cast<std::size_t>(end) + 1);
-    const std::size_t required = highest + 1;
+    // Two demands on the input, and the larger wins: the last output frame interpolates over
+    // `floor(last) - 1` to `floor(last) + 2`, so the buffer has to reach the last of those; and
+    // the next call must start reading at a position of at least 1 once the tail has been shifted
+    // to the front, which bounds how far ahead this call may pull.
+    const std::size_t required = std::max(static_cast<std::size_t>(last) + 3,
+                                          static_cast<std::size_t>(end) + history - 1);
 
     if (required > input_left_.size()) {
         // The host asked for more than it declared as its maximum. Nothing to do but stay silent;
@@ -181,9 +237,18 @@ void Instrument::render(float* left, float* right, std::uint32_t frames) noexcep
     capacity_.store(session_->voice_capacity(), std::memory_order_relaxed);
     xg_.store(session_->xg_mode(), std::memory_order_relaxed);
 
-    // Carry the three frames straddling the next read position to the front, and bring the position
-    // back into [1, 2) with them, so the buffer never has to be longer than one block.
-    const std::size_t shift = static_cast<std::size_t>(end) - 1;
+    // Carry the last frames the engine produced to the front, and bring the read position back
+    // with them, so the buffer never has to be longer than one block.
+    //
+    // `required - history`, and nothing else: the engine's output is a stream, and whatever is not
+    // carried here is never seen again. Taking the tail from `floor(end) - 1` instead is right only
+    // when the block ends past an input frame boundary; when it does not -- which at 44.1 kHz is
+    // about a quarter of blocks, and more the higher the host's rate -- it leaves the last frame
+    // pulled behind, and the next call resumes one frame further on than it should. One sample of
+    // the engine's output dropped, tens of times a second, which on a sustained note is heard as a
+    // steady clicking. It is inaudible in the app because nothing resamples there: the graph runs
+    // at the engine's own rate and CoreAudio's mixer does the conversion.
+    const std::size_t shift = required - history;
     std::copy_n(input_left_.begin() + static_cast<std::ptrdiff_t>(shift), history,
                 input_left_.begin());
     std::copy_n(input_right_.begin() + static_cast<std::ptrdiff_t>(shift), history,
