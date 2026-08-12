@@ -45,26 +45,33 @@ let Tabula_Sonora_AUParameterSpecs = ParameterTreeSpec {
             valueStrings: EngineSettings.polyphonyNames
         )
 
+        // Off, unlike the engine's own default and unlike the app's.
+        //
+        // The engine ships this on -- a wider kernel with the module's pitch-increment ceiling
+        // lifted -- and that is right for a player, where the point is to sound good. A plugin's
+        // claim is narrower: that it is the Sound Canvas voice. Defaulting one resampler to the
+        // module and leaving the other wide would make it neither, so the two move together and
+        // both start where the hardware is. Either can still be turned on.
         ParameterSpec(
             address: .extendedResampler,
             identifier: "extendedResampler",
             name: String(localized: "Extended resampler"),
             units: .boolean,
             valueRange: 0...1,
-            defaultValue: 1
+            defaultValue: 0
         )
 
         // The other resampler, and the only one the app has no use for: it plays at the engine's
-        // own rate and lets CoreAudio convert, where a plugin has to do it here. Off is the
-        // module's own output stage doing the conversion, which is what the original plugin
-        // sounded like at any rate but 32 kHz.
+        // own rate and lets CoreAudio convert, where a plugin has to do it here. Off, for the
+        // reason above -- it is `tg_output_filter`, the allpass into a linear interpolator that
+        // shaped the original plugin at every rate but 32 kHz.
         ParameterSpec(
             address: .extendedOutputResampler,
             identifier: "extendedOutputResampler",
             name: String(localized: "Extended output resampler"),
             units: .boolean,
             valueRange: 0...1,
-            defaultValue: 1
+            defaultValue: 0
         )
     }
 

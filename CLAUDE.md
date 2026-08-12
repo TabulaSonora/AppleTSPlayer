@@ -118,8 +118,9 @@ its screen off stops scheduling the render thread in time and you hear dropouts.
 ring is unusable in a plugin. Its producer runs at wall-clock rate; a DAW bouncing a track pulls
 audio as fast as it can, so every bounce would come back silence and dropouts. So the engine renders
 **inside the host's render block**, for exactly the frames asked for, and resamples 32 kHz → the
-host's rate on the way out (four-point Hermite; the app leaves that conversion to CoreAudio's mixer,
-a plugin cannot).
+host's rate on the way out. Which resampler does that is a parameter: the module's own
+`tg_output_filter` by default, a four-point Hermite of this port's own if asked. The app leaves that
+conversion to CoreAudio's mixer, so none of it runs there.
 
 The contract is kept, not broken: `ToneGenerator` still has exactly one owning thread, and there it
 is the host's audio thread. MIDI arrives on that same thread — the render block hands over the events
@@ -178,9 +179,12 @@ it did not pick.
 - Under XG the bank pair swaps meaning: `bank` holds what GS would call the LSB, the MSB lands in
   the engine's `xg_bank_msb`, and `lookupBank` is what the melodic lookup actually gets (0x7D when
   the XG MSB is 64). `PartState.detail` names the resolved bank whenever it differs from `bank`.
-- `extendedInterpolation` is the **one setting whose default is not the module** — a wider resampling
-  kernel with the module's 4× pitch-increment ceiling lifted. Anything being compared against
-  `SCCore.dll` needs it off; upstream's own gates render with it off.
+- `extendedInterpolation` is the **one engine setting whose default is not the module** — a wider
+  resampling kernel with the module's 4× pitch-increment ceiling lifted. Anything being compared
+  against `SCCore.dll` needs it off; upstream's own gates render with it off. **The plugin is the
+  exception to the exception:** its parameter tree defaults both this and `extendedOutputResampler`
+  off, so an Audio Unit starts as the hardware and a player starts as the nicer-sounding thing.
+  Defaulting one to the module and not the other would be neither.
 - Changing any `EngineSettings` but `outputGain` rebuilds the `ToneGenerator` (part state replayed
   across it, sounding voices lost) but never the `NoteRenderer` — tables are read once per session.
 - Underruns are surfaced all the way to the UI on purpose. Never hide them.

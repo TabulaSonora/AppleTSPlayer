@@ -23,9 +23,9 @@ extern "C" TSEngineSettings TSEngineSettingsDefault(void)
     settings.efx = defaults.efx;
     settings.extendedInterpolation = defaults.extended_interpolation;
 
-    // The Hermite, which is what the plugin has been converting with and what the click fix was
-    // made against. The module's own stage is the reference and is one switch away; it is not the
-    // default only because it is the newer path of the two through the render loop.
+    // The Hermite here, which keeps the app and the CLI exactly as they were -- neither resamples
+    // anyway, so for them this decides nothing but which branch is compiled past. The plugin, which
+    // is the only thing that converts, defaults it the other way in its parameter tree.
     settings.extendedOutputResampler = true;
 
     settings.outputGain = defaults.output_gain;
