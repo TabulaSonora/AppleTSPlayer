@@ -161,11 +161,8 @@ private:
     /// The fourth frame is what reconciles the two. See `render`.
     static constexpr std::size_t history = 4;
 
-    /// Which resampler is running, for `latency_seconds` to answer without taking the lock: a
-    /// host asks for the latency from its own thread, and the two paths cost different amounts.
-    std::atomic<bool> extended_output_{true};
-
-    /// The generator's event staging, in engine frames, cached here for the same reason.
+    /// The generator's event staging, in engine frames, cached so `latency_seconds` can answer
+    /// without taking the lock: a host asks for the latency from whichever thread it likes.
     std::atomic<int> event_frames_{0};
 
     std::atomic<double> gain_{1.0};

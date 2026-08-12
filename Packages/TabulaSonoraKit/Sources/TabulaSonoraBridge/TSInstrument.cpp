@@ -79,7 +79,6 @@ void Instrument::set_settings(const TSEngineSettings& settings)
 {
     const std::lock_guard<std::mutex> guard{lock_};
     settings_ = settings;
-    extended_output_.store(settings.extendedOutputResampler, std::memory_order_relaxed);
     session_->set_settings(settings);
     event_frames_.store(session_->event_latency_frames(), std::memory_order_relaxed);
     gain_.store(settings.outputGain, std::memory_order_relaxed);
@@ -144,7 +143,13 @@ double Instrument::latency_seconds() const noexcept
     //
     // Reported because an unreported delay is how a plugin drifts against a click, and the figure
     // was one frame for both until the two paths existed to be told apart.
-    const double resampler = extended_output_.load(std::memory_order_relaxed) ? 5.0 : 2.0;
+    //
+    // The larger of the two rather than whichever is running, because `AUAudioUnit.latency` says a
+    // latency that moves with a parameter "is generally not useful to hosts" -- a host adds its
+    // delay once, before it starts rendering, and is not prepared to track a change. Three frames,
+    // a tenth of a millisecond, is not worth handing a host something it cannot use. The module's
+    // stage is therefore declared two frames later than it is.
+    constexpr double resampler = 5.0;
 
     // And the 128 as well, which no version of this declared. Both paths sit behind the module's
     // event staging and so does the module, so a host that compensates for it puts this plugin
@@ -152,6 +157,20 @@ double Instrument::latency_seconds() const noexcept
     // late against everything that was compensated.
     const auto staged = static_cast<double>(event_frames_.load(std::memory_order_relaxed));
 
+    // Not counted, and not fixable: the generator renders in whole 32-frame chunks and hands out
+    // what was asked for, so between calls it holds what is left of the last one -- audio computed
+    // before any event that has since arrived, and which no event can now reach. Measured at 32
+    // kHz, a note sent between calls sounds after a flat 133 frames when the host's block is a
+    // multiple of 32, and anywhere from 133 to 164 when it is not.
+    //
+    // Off the engine's own rate there is no block size that avoids it: 512 frames at 44.1 kHz want
+    // 371.5 of input. Pulling in multiples of 32 and keeping the surplus here does not help either,
+    // because the surplus is the same already-rendered audio, merely held on this side of the
+    // generator -- it would make `buffered_frames` read zero while changing nothing audible.
+    //
+    // It is the module's own millisecond event grid, which `drain_events` runs on there too, so it
+    // is inherited rather than introduced. Under 1 ms, one-sided, and jitter rather than offset,
+    // which a fixed delay cannot compensate for anyway.
     return (staged + resampler) / static_cast<double>(engine_rate);
 }
 

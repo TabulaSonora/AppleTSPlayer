@@ -223,9 +223,13 @@ struct InstrumentTests {
     /// frame for years and is neither path's real figure; both are measured here rather than
     /// asserted, by where a note's first sound actually lands.
     ///
-    /// Checked against the measurement outright, not merely between the two paths: the engine's
-    /// event staging is declared now too, so the reported figure is the whole delay and there is
-    /// nothing left for a difference to cancel.
+    /// Checked against the measurement outright: the engine's event staging is declared too, so
+    /// the reported figure is the whole fixed delay and there is nothing left to cancel.
+    ///
+    /// One figure covers both resamplers, because a latency that moves with a parameter is no use
+    /// to a host that adds its delay once before rendering. So the claim is not equality -- the
+    /// module's stage is declared the Hermite's three frames late -- but that the plugin is never
+    /// heard *later* than it says, which is the direction that matters.
     @Test(.enabled(if: romPath != nil))
     func theReportedLatencyIsTheLatencyThereIs() throws {
         /// The first output frame of a note, in engine frames, and what the plugin claims.
@@ -262,10 +266,16 @@ struct InstrumentTests {
                 let named = extendedOutput ? "Hermite" : "module"
                 let (measured, reported) = try onset(extendedOutput: extendedOutput, rate: rate)
 
-                // Within a frame: the onset is where the attack first crosses a threshold, which
+                // Never early: whatever is declared must be at least what it takes. The tolerance
+                // is a frame, because the onset is where the attack first crosses a threshold and
                 // at a fractional ratio need not land on the same output frame every time.
-                #expect(abs(measured - reported) < 1.5,
-                        "\(named) at \(rate) Hz sounds after \(measured) engine frames but reports \(reported)")
+                #expect(reported > measured - 1.5,
+                        "\(named) at \(rate) Hz sounds after \(measured) engine frames but reports only \(reported)")
+
+                // And not late by more than the gap between the two paths, or the figure has
+                // drifted from the thing it is meant to cover.
+                #expect(reported < measured + 4.5,
+                        "\(named) at \(rate) Hz reports \(reported) for a \(measured)-frame delay")
             }
         }
     }
