@@ -27,5 +27,28 @@
 DEVELOPMENT_TEAM = 8WHB6LKY28
 TS_APP_GROUP_DOMAIN = co.losno
 
+// The group identifier itself, formed once from the domain. iOS takes this spelling verbatim;
+// macOS prefixes it with $(TeamIdentifierPrefix), which is substituted from the provisioning
+// profile when the entitlements are processed and so cannot be written here.
+//
+TS_APP_GROUP = group.$(TS_APP_GROUP_DOMAIN).tabula-sonora
+
+// The same identifier again, for the `TSAppGroup` key in both Info.plist files, and deliberately
+// empty anywhere but iOS.
+//
+// That key is how the iOS build learns the group at runtime. macOS reads it back out of its own
+// code signature with SecTask, which is the authoritative answer and is macOS-only -- there is no
+// iOS equivalent, supported or otherwise -- so iOS is told instead, by the same setting that
+// spells its entitlements. macOS gets the empty string rather than this value because it must not
+// look here: the identifier it needs carries a team prefix this cannot know, and a plausible wrong
+// answer is worse than none. ROMStore reads the key on iOS only, and treats empty as absent.
+//
+// It has to be assigned here rather than as INFOPLIST_KEY_TSAppGroup, which sounds like the right
+// mechanism and silently is not: the build system merges only Info.plist keys it recognises, and
+// drops anything else without a warning.
+TS_APP_GROUP_INFOPLIST =
+TS_APP_GROUP_INFOPLIST[sdk=iphoneos*] = $(TS_APP_GROUP)
+TS_APP_GROUP_INFOPLIST[sdk=iphonesimulator*] = $(TS_APP_GROUP)
+
 // Anything above may be reassigned below; in an xcconfig the last assignment wins.
 #include? "Local.xcconfig"

@@ -251,6 +251,16 @@
 	<true/>
 
 	<!--
+	  The app group the app and its Audio Unit share the ROM through, for the iOS build alone: it
+	  has no way to read its own entitlements, so it is told here instead. Empty on macOS, which
+	  reads the authoritative team-prefixed value out of its code signature -- see
+	  TS_APP_GROUP_INFOPLIST in Xcode-config/Shared.xcconfig, which is also what spells the
+	  entitlements files, so the two cannot drift.
+	-->
+	<key>TSAppGroup</key>
+	<string>$(TS_APP_GROUP_INFOPLIST)</string>
+
+	<!--
 	  iOS only, and ignored elsewhere. Without it playback stops the moment the app leaves the
 	  screen, which also means the lock screen transport never appears: there would be nothing left
 	  playing for it to control.

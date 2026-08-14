@@ -153,12 +153,20 @@ it did not pick.
 - **The team and the app group are build configuration, never source.** `DEVELOPMENT_TEAM` and
   `TS_APP_GROUP_DOMAIN` come from `Xcode-config/Shared.xcconfig`, which defaults to upstream's and
   includes a gitignored `Local.xcconfig` that overrides both — a group has to be registered to the
-  team that signs it, so a fork needs its own domain. The four entitlements files are the only place
-  the identifier is spelled; `ROMStore.appGroup` reads it back out of the running process's own
-  entitlements with `SecTaskCopyValueForEntitlement` rather than keeping a copy, because a copy that
-  disagreed would not be a build error, only a plugin that cannot find the ROM. Keep
-  `DEVELOPMENT_TEAM` out of `project.pbxproj` — a target-level setting beats the config file, and
-  Xcode writes one back whenever the Signing & Capabilities tab is touched.
+  team that signs it, so a fork needs its own domain. `TS_APP_GROUP` in the same file forms the
+  identifier once and every other spelling of it expands that: the four entitlements files, and the
+  `TSAppGroup` Info.plist key. Nothing hard-codes it, because a copy that disagreed would not be a
+  build error, only a plugin that cannot find the ROM. Keep `DEVELOPMENT_TEAM` out of
+  `project.pbxproj` — a target-level setting beats the config file, and Xcode writes one back
+  whenever the Signing & Capabilities tab is touched.
+- **How `ROMStore.appGroup` finds the group differs by platform, and it has to.** macOS asks its own
+  code signature (`SecTaskCopyValueForEntitlement`), which is the value that actually decides what
+  it may open. That API does not exist on iOS — the naive port does not compile — and iOS has no
+  supported substitute, so the build tells it instead: `TS_APP_GROUP_INFOPLIST` writes the group
+  into `TSAppGroup` under the iOS SDKs and leaves it empty everywhere else, and `ROMStore` reads
+  the key on iOS only. Note that `INFOPLIST_KEY_TSAppGroup` looks like the right way to set that
+  and is not — the build system merges only Info.plist keys it recognises, and drops the rest with
+  no warning, so the key is assigned in the two `Info.plist` files themselves.
 - A part is addressed as `port * 16 + channel`, 0–63 (`TS_MAX_PARTS`). `ports` is 1/2/4 → 16/32/64
   parts; the module itself has two.
 - **The port travels on the message, and in a plugin that means the cable.** There is no port-select

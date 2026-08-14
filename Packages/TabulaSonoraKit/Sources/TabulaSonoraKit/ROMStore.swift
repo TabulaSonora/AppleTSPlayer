@@ -13,24 +13,27 @@ import Security
 /// verified flag. It is also `nonisolated` on purpose -- the plugin loads the ROM off the main actor
 /// while its view is being built.
 public enum ROMStore {
-    /// The app group both bundles are entitled to, asked of this process's own code signature.
+    /// The app group both bundles are entitled to, asked of the build rather than written down.
     ///
-    /// Asked rather than written down, because writing it down is what goes wrong. The identifier
-    /// is spelled differently per platform and neither platform accepts the other's spelling -- iOS
-    /// wants it to begin with `group.`, macOS wants the team identifier in front of that -- so it
-    /// already appears in four entitlements files, and a fork signed by another team has to change
-    /// the domain in all of them (`TS_APP_GROUP_DOMAIN` in `Xcode-config/Shared.xcconfig`). A fifth
-    /// copy here, in Swift, would have to be edited to match and would be the one nothing checks: a
-    /// mismatch is not a build error, only an app whose plugin cannot find the ROM.
+    /// Asked, because writing it down is what goes wrong. The identifier is spelled differently per
+    /// platform and neither platform accepts the other's spelling -- iOS wants it to begin with
+    /// `group.`, macOS wants the team identifier in front of that -- so it already appears in four
+    /// entitlements files, and a fork signed by another team has to change the domain in all of
+    /// them (`TS_APP_GROUP_DOMAIN` in `Xcode-config/Shared.xcconfig`). Another copy here, in Swift,
+    /// would have to be edited to match and would be the one nothing checks: a mismatch is not a
+    /// build error, only an app whose plugin cannot find the ROM.
     ///
-    /// The entitlement is what actually decides which container this process may open, so it is the
-    /// one spelling that cannot be wrong, and reading it back means the team and the domain live in
-    /// the build configuration alone.
+    /// Where it is asked from differs by platform, because the ways of asking do. macOS reads the
+    /// entitlement back out of this process's own code signature -- the value that actually decides
+    /// which container may be opened, so the one spelling that cannot be wrong. iOS has no such API
+    /// and reads the `TSAppGroup` Info.plist key instead, which the build fills in from the same
+    /// `TS_APP_GROUP` setting that spells the entitlements. Both routes lead back to the xcconfig,
+    /// so the team and the domain still live in the build configuration alone.
     public static let appGroup: String = entitledAppGroup() ?? defaultAppGroup
 
-    /// What upstream signs as, for a build with no entitlements to read -- a unit test, or a copy
-    /// whose signature did not survive. Neither can open a group container anyway; `romURL` falls
-    /// back to Application Support for both.
+    /// What upstream signs as, for a build with nothing to read the group out of -- a unit test, a
+    /// copy whose signature did not survive, or a package build with no app Info.plist around it.
+    /// None of those can open a group container anyway; `romURL` falls back to Application Support.
     private static let defaultAppGroup: String = {
         #if os(macOS)
         "8WHB6LKY28.group.co.losno.tabula-sonora"
@@ -39,6 +42,7 @@ public enum ROMStore {
         #endif
     }()
 
+    #if os(macOS)
     /// The app group this bundle is entitled to, or nil if it is entitled to none.
     ///
     /// Matched by suffix rather than taken as the first: an entitlement may list more than one
@@ -53,6 +57,26 @@ public enum ROMStore {
         }
         return groups.first { $0.hasSuffix(".tabula-sonora") }
     }
+    #else
+    /// The same identifier, carried in the bundle because iOS cannot be asked for it.
+    ///
+    /// `SecTaskCreateFromSelf` and `SecTaskCopyValueForEntitlement` are macOS-only -- an iOS build
+    /// of the branch above does not compile, let alone run -- and iOS offers no supported way for a
+    /// process to read its own entitlements. So the build writes the group into the app's and the
+    /// extension's `Info.plist` as `TSAppGroup`, under the iOS SDKs only, from the `TS_APP_GROUP`
+    /// setting the entitlements are spelled from. It is a copy, but not a hand-maintained one: both
+    /// come from the same xcconfig line in the same build, so they cannot disagree.
+    ///
+    /// `Bundle.main` is the running bundle, which inside the Audio Unit is the appex -- each target
+    /// carries its own key, so each finds the group it is actually entitled to.
+    ///
+    /// Empty counts as absent. The key is present but blank in any bundle built for another SDK,
+    /// where the setting behind it is deliberately unset.
+    private static func entitledAppGroup() -> String? {
+        let group = Bundle.main.object(forInfoDictionaryKey: "TSAppGroup") as? String
+        return group?.isEmpty == false ? group : nil
+    }
+    #endif
 
     public static let fileName = "SCCore.dll"
 
