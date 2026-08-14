@@ -122,8 +122,14 @@ final class ObservableAUParameter: ObservableAUParameterNode {
     /// not touch main-actor state. Removing the observer is exactly what has to happen there --
     /// the parameter outlives this object and keeps every observer it was handed -- so the two
     /// it needs step outside the isolation rather than the teardown being skipped.
-    private nonisolated(unsafe) weak var parameter: AUParameter?
-    private nonisolated(unsafe) var observerToken: AUParameterObserverToken!
+    ///
+    /// `@ObservationIgnored` is what makes that work, and is not merely tidiness. `@Observable`
+    /// rewrites every stored property it tracks into a computed one over hidden storage, and an
+    /// isolation attribute on a computed property means nothing -- the compiler says as much,
+    /// suggesting plain `nonisolated`, which then cannot be applied to a mutable stored property
+    /// either. Neither is observable state in any case: no view reads them.
+    @ObservationIgnored private nonisolated(unsafe) weak var parameter: AUParameter?
+    @ObservationIgnored private nonisolated(unsafe) var observerToken: AUParameterObserverToken!
     private var editingState: EditingState = .inactive
 
     let min: AUValue
