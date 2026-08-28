@@ -71,6 +71,19 @@ typedef struct {
     /// bypassed, or the signal would pass through two allpass stages and neither would be the
     /// module's arrangement.
     bool extendedOutputResampler;
+    /// Deliver the SysEx the module's input queue would have thrown away.
+    ///
+    /// Off by default, because off is the module. The hardware's input queue takes 2,048 packets
+    /// per control tick and silently drops the rest, so a file that opens with a bulk dump longer
+    /// than that never gets its own trailing program changes -- the module plays the patches the
+    /// dump chose, and so does this engine. Upstream measured that a host cannot avoid it by
+    /// flushing more often: the bound is on the buffer nothing but the tick drains.
+    ///
+    /// On starts a fresh window at every SysEx message, which is something the module cannot be
+    /// made to do. It is the second setting that knowingly departs from `SCCore.dll`, and for the
+    /// same kind of reason as `extendedInterpolation`: turn it on to hear a file as it was written,
+    /// leave it off to hear it as the hardware receives it.
+    bool flushBeforeSysEx;
 
     /// Linear gain on the finished mix. Applied live, without a rebuild.
     double outputGain;

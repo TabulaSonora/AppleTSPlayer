@@ -30,6 +30,7 @@ struct PreferencesTests {
         settings.delay = true
         settings.efx = false
         settings.extendedInterpolation = false
+        settings.flushBeforeSysEx = true
         settings.outputGain = 1.75
 
         Preferences(defaults: defaults).store(settings)
@@ -82,12 +83,18 @@ struct PreferencesTests {
         #expect(settings.reverb == EngineSettings.default.reverb)
 
         // The setting added last, which is the one a domain written before it will be missing.
-        #expect(settings.extendedInterpolation == EngineSettings.default.extendedInterpolation)
+        #expect(settings.flushBeforeSysEx == EngineSettings.default.flushBeforeSysEx)
     }
 
     /// The extended resampler is the one default that is not the module's own behaviour, so it is
     /// worth pinning: a change upstream should be a decision here, not a surprise.
     @Test func theExtendedResamplerIsOnByDefault() {
         #expect(EngineSettings.default.extendedInterpolation)
+    }
+
+    /// And the other departure from the module defaults the other way, for the same reason: the
+    /// module drops what its input queue cannot take, so this app does too until it is asked not to.
+    @Test func droppedSysExIsNotDeliveredByDefault() {
+        #expect(!EngineSettings.default.flushBeforeSysEx)
     }
 }

@@ -56,6 +56,18 @@ public struct EngineSettings: Equatable, Sendable {
     /// `false` is the module's own output stage, the allpass into a linear interpolator that
     /// shaped the original plugin off 1:1. `true` is this port's wider four-point Hermite.
     public var extendedOutputResampler: Bool
+    /// Deliver the SysEx the module's input queue would have thrown away.
+    ///
+    /// Off by default, because off is the module. The hardware takes 2,048 packets per control tick
+    /// and silently drops the rest, so a file opening with a bulk dump longer than that never gets
+    /// its own trailing program changes and plays on the patches the dump chose -- and this engine
+    /// drops them too. Upstream measured that a host cannot avoid it by flushing more often: the
+    /// bound is on a buffer nothing but the tick drains.
+    ///
+    /// On starts a fresh window at every SysEx message, which is something the module cannot be made
+    /// to do -- the second setting that knowingly departs from `SCCore.dll`. Turn it on to hear a
+    /// file as written, leave it off to hear it as the hardware receives it.
+    public var flushBeforeSysEx: Bool
 
     /// Linear gain on the finished mix. Applied live, without a rebuild.
     public var outputGain: Double
@@ -81,6 +93,7 @@ public struct EngineSettings: Equatable, Sendable {
         efx = settings.efx
         extendedInterpolation = settings.extendedInterpolation
         extendedOutputResampler = settings.extendedOutputResampler
+        flushBeforeSysEx = settings.flushBeforeSysEx
         outputGain = settings.outputGain
     }
 
@@ -94,6 +107,7 @@ public struct EngineSettings: Equatable, Sendable {
                          efx: efx,
                          extendedInterpolation: extendedInterpolation,
                          extendedOutputResampler: extendedOutputResampler,
+                         flushBeforeSysEx: flushBeforeSysEx,
                          outputGain: outputGain)
     }
 }

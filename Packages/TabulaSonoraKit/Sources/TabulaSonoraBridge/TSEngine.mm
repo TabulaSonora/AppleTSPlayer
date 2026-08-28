@@ -3,6 +3,7 @@
 #include "TSInstrument.hpp"
 #include "TSPlayer.hpp"
 
+#include "tabulasonora/build_registry.hpp"
 #include "tabulasonora/rom_image.hpp"
 #include "tabulasonora/table_manifest.hpp"
 
@@ -109,29 +110,48 @@ void fill_error(NSError **error, TSEngineError code, const std::string &message)
 
 @implementation TSROMIdentity
 
-- (instancetype)initWithIdentity:(const ts::DllIdentity &)identity
+- (instancetype)initWithBuild:(const ts::BuildProfile &)build
 {
     self = [super init];
     if (self) {
+        const ts::DllIdentity &identity = build.identity();
+        _identifier = to_ns(build.id());
         _fileName = to_ns(identity.file_name);
         _product = to_ns(identity.product);
         _version = to_ns(identity.version);
+        _architecture = to_ns(build.architecture());
         _length = identity.size;
         _sha256 = to_ns(identity.sha256);
+        _pinned = build.pinned();
     }
     return self;
 }
 
 + (TSROMIdentity *)pinned
 {
-    // The manifest is embedded (see manifest_json.generated.cpp), so this parses a compiled-in byte
-    // span on first use and touches no file. That is what makes it usable as a build check.
+    // Both assets are embedded (see manifest_json.generated.cpp and builds_json.generated.cpp), so
+    // this parses compiled-in byte spans on first use and touches no file. That is what makes it
+    // usable as a build check with no ROM present.
     static TSROMIdentity *pinned;
     static dispatch_once_t once;
     dispatch_once(&once, ^{
-        pinned = [[TSROMIdentity alloc] initWithIdentity:ts::TableManifest::defaults().dll()];
+        pinned = [[TSROMIdentity alloc] initWithBuild:ts::BuildRegistry::defaults().pinned()];
     });
     return pinned;
+}
+
++ (NSArray<TSROMIdentity *> *)readableBuilds
+{
+    static NSArray<TSROMIdentity *> *builds;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        NSMutableArray<TSROMIdentity *> *found = [NSMutableArray array];
+        for (const ts::BuildProfile &build : ts::BuildRegistry::defaults().builds()) {
+            [found addObject:[[TSROMIdentity alloc] initWithBuild:build]];
+        }
+        builds = [found copy];
+    });
+    return builds;
 }
 
 @end
@@ -365,6 +385,12 @@ void fill_error(NSError **error, TSEngineError code, const std::string &message)
     return name.empty() ? nil : to_ns(name);
 }
 
+- (nullable TSROMIdentity *)romBuild
+{
+    const ts::BuildProfile *build = _player->rom_build();
+    return build == nullptr ? nil : [[TSROMIdentity alloc] initWithBuild:*build];
+}
+
 - (nullable NSString *)songName
 {
     const std::string name = _player->song_name();
@@ -520,6 +546,12 @@ void fill_error(NSError **error, TSEngineError code, const std::string &message)
 {
     const std::string name = _instrument->rom_name();
     return name.empty() ? nil : to_ns(name);
+}
+
+- (nullable TSROMIdentity *)romBuild
+{
+    const ts::BuildProfile *build = _instrument->rom_build();
+    return build == nullptr ? nil : [[TSROMIdentity alloc] initWithBuild:*build];
 }
 
 - (BOOL)hasROM

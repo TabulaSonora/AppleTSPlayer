@@ -10,7 +10,7 @@ NS_ASSUME_NONNULL_BEGIN
 extern NSErrorDomain const TSEngineErrorDomain;
 
 typedef NS_ERROR_ENUM(TSEngineErrorDomain, TSEngineError) {
-    /// The file is not the `SCCore.dll` build the engine is pinned to.
+    /// The file is not one of the `SCCore.dll` builds the engine knows how to read.
     TSEngineErrorROMIdentity = 1,
     /// The file could not be read, or could not be parsed as anything the engine understands.
     TSEngineErrorUnreadable = 2,
@@ -18,24 +18,39 @@ typedef NS_ERROR_ENUM(TSEngineErrorDomain, TSEngineError) {
     TSEngineErrorNotReady = 3,
 };
 
-/// The DLL build the engine is pinned to.
+/// One `SCCore.dll` build the engine can read.
 ///
 /// The engine reads its wave ROM and synth tables out of a `SCCore.dll` the user supplies from a
-/// licensed SOUND Canvas VA install, and it refuses any other build. These are the values it checks
-/// against, surfaced so the import UI can name the file it wants and so a build can be
-/// sanity-checked without a ROM present.
+/// licensed SOUND Canvas VA install. Several releases carry the same tables packed differently, and
+/// the engine translates its offsets into whichever one it is given, so this describes *a* build
+/// rather than *the* build: `readableBuilds` is the whole list, surfaced so the import UI can name
+/// every file it would take, and `pinned` is the one the offsets are recorded in.
 @interface TSROMIdentity : NSObject
 
+/// The build registry's own id, e.g. `2016-03-09-x64`. Stable, and not for display.
+@property (nonatomic, readonly) NSString *identifier;
 @property (nonatomic, readonly) NSString *fileName;
 @property (nonatomic, readonly) NSString *product;
 @property (nonatomic, readonly) NSString *version;
-/// Exact file size in bytes -- 27,347,456.
+/// `x64` or `x86`. Diagnostic only: the DLL is read as data, so either works on any machine.
+@property (nonatomic, readonly) NSString *architecture;
+/// Exact file size in bytes.
 @property (nonatomic, readonly) int64_t length;
 /// Lower-case hex SHA-256 of the whole file.
 @property (nonatomic, readonly) NSString *sha256;
 
-/// The identity compiled into the embedded table manifest. Needs no ROM.
+/// Whether this is the build every table offset is recorded in.
+///
+/// The reference coordinate system, not a better copy: the tables and the wave ROM are the same
+/// data in every build listed here. It is worth naming only because it is the one that needs no
+/// translation.
+@property (nonatomic, readonly, getter=isPinned) BOOL pinned;
+
+/// The build the embedded manifest's offsets are pinned to. Needs no ROM.
 @property (class, nonatomic, readonly) TSROMIdentity *pinned;
+
+/// Every build the embedded registry knows how to read, the pinned one among them. Needs no ROM.
+@property (class, nonatomic, readonly) NSArray<TSROMIdentity *> *readableBuilds;
 
 @end
 
@@ -258,7 +273,7 @@ typedef NS_ENUM(NSInteger, TSSongVintage) {
 /// Opens a `SCCore.dll` and builds the engine over it.
 ///
 /// `verifyFully` hashes all 27 MB, which takes a moment; pass NO for a file already verified once,
-/// which then checks only size and PE timestamp.
+/// which then identifies the build by size and PE timestamp alone.
 - (BOOL)loadROMAtPath:(NSString *)path
           verifyFully:(BOOL)verifyFully
                 error:(NSError **)error;
@@ -270,6 +285,10 @@ typedef NS_ENUM(NSInteger, TSSongVintage) {
 - (void)unloadSong;
 
 @property (nonatomic, readonly, nullable) NSString *romName;
+
+/// Which build the loaded file was identified as, or nil with no ROM loaded.
+@property (nonatomic, readonly, nullable) TSROMIdentity *romBuild;
+
 @property (nonatomic, readonly, nullable) NSString *songName;
 
 /// What the loaded file says about itself.
@@ -363,6 +382,10 @@ typedef NS_ENUM(NSInteger, TSSongVintage) {
                 error:(NSError **)error;
 
 @property (nonatomic, readonly, nullable) NSString *romName;
+
+/// Which build the loaded file was identified as, or nil with no ROM loaded.
+@property (nonatomic, readonly, nullable) TSROMIdentity *romBuild;
+
 @property (nonatomic, readonly) BOOL hasROM;
 
 /// What a panel shows, and all of it.

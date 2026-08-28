@@ -18,12 +18,29 @@ public final class Player {
     /// without hopping to the main actor to read a number that cannot change.
     public nonisolated static let sampleRate = TSEngine.sampleRate
 
-    /// The `SCCore.dll` build the engine requires, for an import screen to name.
+    /// The `SCCore.dll` builds the engine reads, for an import screen to name.
+    ///
+    /// More than one, and the pinned build is only the first among them: several SOUND Canvas VA
+    /// releases carry the same tables and the engine translates its offsets into whichever it is
+    /// given. An import screen naming one file would send people hunting for a release they may
+    /// already have a sibling of.
+    public static let readableROMs = ROMIdentity.readable
+
+    /// The build the engine's offsets are recorded in, which is what an import screen describes
+    /// when it has room for only one.
     public static let requiredROM = ROMIdentity.pinned
 
     // MARK: State a view draws
 
     public private(set) var romName: String?
+
+    /// Which build the loaded `SCCore.dll` turned out to be.
+    ///
+    /// Worth showing beside the name now that more than one file is accepted: two people running
+    /// the same version of this app can be playing through different releases, and a difference
+    /// nobody can see is a difference nobody can report.
+    public private(set) var romBuild: ROMIdentity?
+
     public private(set) var songName: String?
 
     /// What the loaded file says about itself: its tracks, its text, its markers, and the module it
@@ -147,6 +164,7 @@ public final class Player {
     public func loadROM(at url: URL, verifyFully: Bool) throws {
         try engine.loadROM(atPath: url.path(percentEncoded: false), verifyFully: verifyFully)
         romName = engine.romName
+        romBuild = engine.romBuild.map(ROMIdentity.init)
         try startOutput()
         startTicking()
     }

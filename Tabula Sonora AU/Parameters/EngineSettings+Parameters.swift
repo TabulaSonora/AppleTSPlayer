@@ -79,6 +79,8 @@ extension EngineSettings {
             extendedInterpolation = value > 0.5
         case .extendedOutputResampler:
             extendedOutputResampler = value > 0.5
+        case .deliverDroppedSysEx:
+            flushBeforeSysEx = value > 0.5
         default:
             break
         }

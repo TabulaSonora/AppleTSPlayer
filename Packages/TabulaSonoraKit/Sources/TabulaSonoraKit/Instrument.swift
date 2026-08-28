@@ -30,6 +30,9 @@ public final class Instrument: @unchecked Sendable {
     public var handle: UnsafeMutableRawPointer { engine.handle }
 
     public var romName: String? { engine.romName }
+
+    /// Which build the loaded `SCCore.dll` turned out to be, for the panel to name.
+    public var romBuild: ROMIdentity? { engine.romBuild.map(ROMIdentity.init) }
     public var hasROM: Bool { engine.hasROM }
 
     /// The delay to report to the host, from the resampler's one-frame look-ahead.

@@ -3,6 +3,7 @@
 #include "TSSongInfo.hpp"
 #include "TSTypes.h"
 
+#include "tabulasonora/build_registry.hpp"
 #include "tabulasonora/note_renderer.hpp"
 #include "tabulasonora/render_options.hpp"
 #include "tabulasonora/rom_image.hpp"
@@ -122,9 +123,10 @@ public:
 
     /// Opens a `SCCore.dll` and builds the engine over it.
     ///
-    /// Throws `RomIdentityError` if the file is not the pinned build, or `std::runtime_error` if it
-    /// cannot be read. `full` hashes all 27 MB and takes a moment; `quick` checks size and PE
-    /// timestamp, which is what a file already verified once needs.
+    /// Throws `RomIdentityError` if the file is not one of the builds the engine knows how to read,
+    /// or `std::runtime_error` if it cannot be read. `full` hashes all 27 MB and takes a moment;
+    /// `quick` identifies the build by size and PE timestamp, which is what a file already verified
+    /// once needs.
     void load_rom(const std::string& path, bool verify_fully);
 
     void unload_rom();
@@ -142,6 +144,16 @@ public:
     [[nodiscard]] bool has_song() const noexcept { return player_.has_value(); }
 
     [[nodiscard]] const std::string& rom_name() const noexcept { return rom_name_; }
+
+    /// Which `SCCore.dll` build the loaded file was identified as, or null with no ROM loaded.
+    ///
+    /// The engine reads several releases, translating the manifest's offsets into whichever one it
+    /// was given, so "the ROM" no longer names a single file and a front end that says only
+    /// `SCCore.dll` is no longer saying which one it got.
+    [[nodiscard]] const BuildProfile* rom_build() const noexcept
+    {
+        return rom_ ? &rom_->build() : nullptr;
+    }
     [[nodiscard]] const std::string& song_name() const noexcept { return song_name_; }
 
     /// What the loaded file says about itself: names, text, lyrics, markers, and the module it asks
@@ -248,6 +260,9 @@ public:
         NoteRenderer* notes = nullptr;
         std::vector<MidiEvent> events;
         std::optional<smf::SongLoop> loop;
+        /// Carried so the exported song is the same `smf::Song` playback was armed with, even
+        /// though the export does not skip to it.
+        std::int64_t first_note = 0;
         ToneGeneratorOptions options;
         std::int64_t total = 0;
     };
@@ -294,6 +309,13 @@ private:
 
     std::vector<MidiEvent> song_events_;
     std::int64_t song_length_ = 0;
+
+    /// Where the loaded file first sounds, which is where the player is armed to start.
+    ///
+    /// Kept beside the events because the player is rebuilt from them -- every settings change
+    /// arms a fresh one -- and `smf::Song` carries this as a field the parse fills in, so dropping
+    /// it here would mean a rebuild quietly forgetting the lead-in it had skipped.
+    std::int64_t song_first_note_ = 0;
     std::optional<smf::SongLoop> song_loop_;
     SongInfo song_info_;
     bool looping_ = false;

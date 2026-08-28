@@ -34,6 +34,29 @@ struct RenderTests {
         }
     }
 
+    /// A song is armed at its first note, not at its silent lead-in.
+    ///
+    /// The engine offers this and does not do it: `SequencePlayer::skip_lead_in` is a playback
+    /// decision, so the bridge has to make it and then keep it -- `Player::load_song` seeks the
+    /// render thread to where the session stands, and a seek to zero there would put the silence
+    /// straight back. That is exactly the kind of undo no listener could describe, so it is worth
+    /// a test rather than a reading.
+    @Test(.enabled(if: romPath != nil))
+    func aSongStartsAtItsFirstNoteRatherThanInItsLeadIn() throws {
+        let engine = TSEngine()
+        try engine.loadROM(atPath: Self.romPath!, verifyFully: false)
+
+        let midi = URL.temporaryDirectory.appending(path: "tabula-sonora-lead-in.mid")
+        try TestSong.leadInThenNote().write(to: midi)
+        defer { try? FileManager.default.removeItem(at: midi) }
+        try engine.loadSong(atPath: midi.path(percentEncoded: false))
+
+        // The note-on is two seconds in, and the skip lands just before it.
+        let position = engine.snapshot().position
+        #expect(position > 60_000)
+        #expect(position < 64_000)
+    }
+
     /// The extended resampler has to reach the generator, not merely the settings struct.
     ///
     /// It is the one setting whose default departs from the module, so a version of it that is

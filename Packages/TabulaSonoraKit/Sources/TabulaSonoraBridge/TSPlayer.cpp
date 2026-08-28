@@ -62,8 +62,12 @@ void Player::load_song(const std::string& path)
 {
     const std::lock_guard<std::mutex> guard{lock_};
     session_.load_song(path);
-    pending_seek_ = 0;
-    audible_.store(0, std::memory_order_relaxed);
+
+    // Where the session armed the song, which is its first note and not sample zero: a file that
+    // opens with a bar of setup is started past the silence. Seeking to zero here -- which is what
+    // this did while every song began at zero -- would put the lead-in straight back.
+    pending_seek_ = session_.position();
+    audible_.store(session_.position(), std::memory_order_relaxed);
     publish();
 }
 
@@ -153,6 +157,12 @@ std::string Player::rom_name() const
 {
     const std::lock_guard<std::mutex> guard{lock_};
     return session_.rom_name();
+}
+
+const BuildProfile* Player::rom_build() const
+{
+    const std::lock_guard<std::mutex> guard{lock_};
+    return session_.rom_build();
 }
 
 std::string Player::song_name() const

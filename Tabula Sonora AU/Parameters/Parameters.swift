@@ -73,6 +73,17 @@ let Tabula_Sonora_AUParameterSpecs = ParameterTreeSpec {
             valueRange: 0...1,
             defaultValue: 0
         )
+
+        // Off by default, as the module is: it drops what its input queue cannot take in one tick,
+        // and so does this engine unless asked otherwise.
+        ParameterSpec(
+            address: .deliverDroppedSysEx,
+            identifier: "deliverDroppedSysEx",
+            name: String(localized: "Deliver dropped SysEx"),
+            units: .boolean,
+            valueRange: 0...1,
+            defaultValue: 0
+        )
     }
 
     ParameterGroupSpec(identifier: "effects", name: String(localized: "Effects")) {

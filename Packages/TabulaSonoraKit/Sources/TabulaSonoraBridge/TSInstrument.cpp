@@ -97,6 +97,12 @@ std::string Instrument::rom_name() const
     return session_->rom_name();
 }
 
+const BuildProfile* Instrument::rom_build() const
+{
+    const std::lock_guard<std::mutex> guard{lock_};
+    return session_->rom_build();
+}
+
 void Instrument::prepare(double output_rate, std::uint32_t max_frames)
 {
     const std::lock_guard<std::mutex> guard{lock_};

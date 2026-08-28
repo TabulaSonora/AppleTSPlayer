@@ -28,4 +28,9 @@ typedef NS_ENUM(AUParameterAddress, Tabula_Sonora_AUParameterAddress) {
     insertionEffects,
     extendedResampler,
     extendedOutputResampler,
+
+    // Appended, never inserted. An address is what a host writes into a saved session, so the
+    // number a parameter has is part of the plugin's format: giving an existing one a new meaning
+    // would restore a session onto the wrong control.
+    deliverDroppedSysEx,
 };

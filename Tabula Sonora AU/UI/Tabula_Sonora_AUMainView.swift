@@ -17,6 +17,7 @@ struct Tabula_Sonora_AUMainView: View {
     weak var audioUnit: Tabula_Sonora_AUAudioUnit?
 
     @State private var romName: String?
+    @State private var romVersion: String?
     @State private var failure: String?
     @State private var voices = 0
     @State private var capacity = 0
@@ -35,7 +36,7 @@ struct Tabula_Sonora_AUMainView: View {
             }
         }
         .padding(20)
-        .frame(minWidth: 420, minHeight: failure == nil ? 340 : 220)
+        .frame(minWidth: 420, minHeight: failure == nil ? 410 : 220)
         .task { await follow() }
     }
 
@@ -47,7 +48,10 @@ struct Tabula_Sonora_AUMainView: View {
                 Text("Tabula Sonora")
                     .font(.headline)
 
-                Text(romName ?? String(localized: "No ROM"))
+                // The release beside the name, because the name no longer identifies the file:
+                // the app copies whichever build was imported into the shared container under one
+                // name of its own, and the engine reads three of them.
+                Text(verbatim: romLabel)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -63,6 +67,16 @@ struct Tabula_Sonora_AUMainView: View {
                     .help("Voices sounding, of the polyphony the engine was built with")
             }
         }
+    }
+
+    /// What the header says the plugin is playing through.
+    ///
+    /// Localised here rather than by `Text`, because the whole expression would otherwise infer
+    /// `LocalizedStringKey` and put each interpolation in the catalogue as a key of its own.
+    private var romLabel: String {
+        guard let romName else { return String(localized: "No ROM") }
+        guard let romVersion else { return romName }
+        return String(localized: "\(romName) · \(romVersion)")
     }
 
     private func missingROM(_ message: String) -> some View {
@@ -112,6 +126,10 @@ struct Tabula_Sonora_AUMainView: View {
             toggle(String(localized: "Extended output resampler"),
                    parameter: parameterTree.voice.extendedOutputResampler)
                 .help("How the engine's 32 kHz reaches this host's rate. Off is the module's own.")
+
+            toggle(String(localized: "Deliver dropped SysEx"),
+                   parameter: parameterTree.voice.deliverDroppedSysEx)
+                .help("Hand over the messages the module's input queue would discard. Off is the module.")
         }
     }
 
@@ -177,6 +195,7 @@ struct Tabula_Sonora_AUMainView: View {
         while !Task.isCancelled {
             if let audioUnit {
                 romName = audioUnit.instrument.romName
+                romVersion = audioUnit.instrument.romBuild?.version
                 failure = audioUnit.instrument.hasROM ? nil
                     : (audioUnit.romFailure ?? String(localized: "Loading the Sound Canvas ROM…"))
 

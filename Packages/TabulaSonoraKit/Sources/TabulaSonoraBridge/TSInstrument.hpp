@@ -63,6 +63,12 @@ public:
 
     [[nodiscard]] std::string rom_name() const;
 
+    /// Which `SCCore.dll` build the loaded file was identified as, or null with no ROM.
+    ///
+    /// A pointer rather than a copy, and safe to hold: build profiles live in the library's own
+    /// registry, which is parsed once and never freed.
+    [[nodiscard]] const BuildProfile* rom_build() const;
+
     // -- What the panel draws. Atomics, and deliberately not a `SessionSnapshot`. --
     //
     // A full capture walks the voice pool and builds a name for every part, which is tens of

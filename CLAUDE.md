@@ -40,20 +40,26 @@ point and depends on signed wrapping, and float narrowing guarantees break if cl
 into an FMA. Upstream exports them via a `ts::numeric_semantics` CMake target; SwiftPM restates them.
 Because they go through `.unsafeFlags`, this package can only ever be consumed **by path**.
 
-**Regenerate the manifest whenever the `nativets` submodule moves:**
+**Regenerate the embedded assets whenever the `nativets` submodule moves:**
 
 ```sh
-swift Packages/TabulaSonoraKit/Scripts/embed-manifest.swift
-shasum -a 256 Packages/TabulaSonoraKit/nativets/assets/manifest.json   # compare to the .cpp header
+swift Packages/TabulaSonoraKit/Scripts/embed-assets.swift
+shasum -a 256 Packages/TabulaSonoraKit/nativets/assets/*.json   # compare to the .cpp headers
 ```
 
-`Sources/TabulaSonoraBridge/manifest_json.generated.cpp` stands in for CMake's configure-time
-`ts_embed_asset()`. A stale copy is **not a build error** — it is an offset map pointing at the wrong
-tables.
+`Sources/TabulaSonoraBridge/manifest_json.generated.cpp` and its neighbour
+`builds_json.generated.cpp` stand in for CMake's configure-time `ts_embed_asset()`, one per
+`ts_embed_asset()` call in `nativets/src/CMakeLists.txt` — add a case to the script when upstream
+adds one. A stale copy is **not a build error**: a stale manifest is an offset map pointing at the
+wrong tables, and a stale registry refuses `SCCore.dll` builds the engine can read.
 
-**Nothing Roland-derived enters this repository.** The engine reads a user-supplied `SCCore.dll`
-(27,347,456 bytes, SHA-256 `117e6aa1…bdb1`) as *data*, never as code. `.gitignore` blocks `*.dll` and
-`*.wav`; keep it that way, and don't commit renders either.
+**Nothing Roland-derived enters this repository.** The engine reads a user-supplied `SCCore.dll` as
+*data*, never as code. It takes **any build in the registry**, not one file: the 2019 build the
+offsets are pinned to (27,347,456 bytes, SHA-256 `117e6aa1…bdb1`) and the 2016 installer's
+`SCCore.64.dll` and `SCCore.32.dll`, whose `.rdata` is packed differently and whose offsets are
+translated through a per-build segment map. `ROMIdentity.readable` is the list; never hard-code one
+hash in the UI. `.gitignore` blocks `*.dll` and `*.wav`; keep it that way, and don't commit renders
+either.
 
 The `nativets/` submodule is upstream and stays untouched — changes belong in
 [NativeTS](https://github.com/TabulaSonora/NativeTS), not here.
@@ -193,9 +199,22 @@ it did not pick.
   exception to the exception:** its parameter tree defaults both this and `extendedOutputResampler`
   off, so an Audio Unit starts as the hardware and a player starts as the nicer-sounding thing.
   Defaulting one to the module and not the other would be neither.
+- `flushBeforeSysEx` is the other departure the engine offers, and it defaults **to** the module: off,
+  the input queue drops what will not fit in a control tick exactly as the hardware does, so a file
+  opening with a long bulk dump plays on the patches the dump chose. On delivers what the queue would
+  have thrown away, which is something the module cannot be made to do — upstream measured that
+  flushing more often changes nothing, because the bound is on a buffer only the tick drains.
 - Changing any `EngineSettings` but `outputGain` rebuilds the `ToneGenerator` (part state replayed
   across it, sounding voices lost) but never the `NoteRenderer` — tables are read once per session.
 - Underruns are surfaced all the way to the UI on purpose. Never hide them.
+- **Playback is not a render, in two places the engine leaves to the caller.** `Session::arm_player`
+  turns on `set_spread_bursts` — the engine drops what will not fit in one control tick's 2,048
+  packets, as the module does to a host that dumps a burst on it, and a player stands in for a cable
+  that cannot dump one — and calls `skip_lead_in`, which starts at the first note and replays the
+  setup before it through `seek`. An export spreads bursts too (so a WAV is the performance that was
+  heard, matching `tabula-sonora render --spread-bursts`) but keeps the lead-in, because a render's
+  length and alignment are what a comparison rests on. `Player::load_song` must seek to
+  `session_.position()` rather than to zero, or the skip is undone on the render thread's next pass.
 - The app reads far more than SMF (RIFF-MIDI, MIDS, MUS, XMI, GMF, HMI, Mobile XMF, LDS). Most have
   no declared UTType, so `Array<UTType>.midiFiles` matches by extension — extend it there.
 - **A drop cannot be filtered at the pointer and still find the file.** `onDrop(of:)` takes the list

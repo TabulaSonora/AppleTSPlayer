@@ -112,6 +112,12 @@ public:
     [[nodiscard]] int latency_ms() const noexcept;
 
     [[nodiscard]] std::string rom_name() const;
+
+    /// Which `SCCore.dll` build the loaded file was identified as, or null with no ROM.
+    ///
+    /// A pointer rather than a copy, and safe to hold: build profiles live in the library's own
+    /// registry, which is parsed once and never freed.
+    [[nodiscard]] const BuildProfile* rom_build() const;
     [[nodiscard]] std::string song_name() const;
 
     /// What the loaded file says about itself. Copied out under the lock, like every other control

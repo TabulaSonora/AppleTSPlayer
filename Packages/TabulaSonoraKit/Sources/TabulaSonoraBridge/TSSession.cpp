@@ -22,6 +22,7 @@ extern "C" TSEngineSettings TSEngineSettingsDefault(void)
     settings.delay = defaults.delay;
     settings.efx = defaults.efx;
     settings.extendedInterpolation = defaults.extended_interpolation;
+    settings.flushBeforeSysEx = defaults.flush_before_sysex;
 
     // The Hermite here, which keeps the app and the CLI exactly as they were -- neither resamples
     // anyway, so for them this decides nothing but which branch is compiled past. The plugin, which
@@ -118,6 +119,7 @@ void Session::load_song(const std::string& path)
     song_name_ = file_name(path);
     song_events_ = std::move(events);
     song_loop_ = parsed.loop;
+    song_first_note_ = parsed.first_note;
 
     // Taken from the same bytes, after the parse rather than before it: `smf::load` is what decides
     // whether this file is playable at all, and a file it throws on should not leave a half-filled
@@ -144,6 +146,7 @@ void Session::unload_song()
     song_name_.clear();
     song_length_ = 0;
     song_loop_.reset();
+    song_first_note_ = 0;
     song_info_ = {};
     used_channels_.fill(false);
     if (engine_) {
@@ -160,6 +163,7 @@ void Session::set_settings(const TSEngineSettings& settings)
                             || settings.chorus != settings_.chorus || settings.delay != settings_.delay
                             || settings.efx != settings_.efx
                             || settings.extendedInterpolation != settings_.extendedInterpolation
+                            || settings.flushBeforeSysEx != settings_.flushBeforeSysEx
                             // Not itself a generator setting, but it decides whether the generator
                             // runs its output stage, which is one.
                             || settings.extendedOutputResampler != settings_.extendedOutputResampler;
@@ -427,6 +431,7 @@ Session::ExportPlan Session::plan_export() const
     plan.notes = const_cast<NoteRenderer*>(&*notes_);
     plan.events = song_events_;
     plan.loop = song_loop_;
+    plan.first_note = song_first_note_;
     plan.options = options();
     plan.total = song_length_ + static_cast<std::int64_t>(tail_seconds * sample_rate);
     return plan;
@@ -438,7 +443,18 @@ void Session::run_export(const ExportPlan& plan, const std::string& path,
     // A second generator over the same note renderer, so exporting disturbs nothing that is playing
     // and costs no second read of the 27 MB of tables.
     ToneGenerator engine{*plan.notes, plan.options};
-    SequencePlayer player{engine, smf::Song{plan.events, plan.loop}};
+    SequencePlayer player{engine, smf::Song{plan.events, plan.loop, plan.first_note}};
+
+    // Spread as the playing engine does, so an export is the performance that was heard. A file
+    // whose opening dump overruns the input queue plays on different patches with this off, and an
+    // export that quietly picks the other reading of the same file would be the worst of both. It
+    // stays byte-comparable against the library's own renderer -- that is now
+    // `tabula-sonora render --spread-bursts`.
+    player.set_spread_bursts(true);
+
+    // The lead-in is *not* skipped, unlike playback. A render is data: its length and its alignment
+    // against a reference render are what a comparison rests on, and silence at the head of a file
+    // is part of the file. Skipping is a listening convenience and belongs where the listening is.
 
     const auto total = static_cast<std::size_t>(plan.total);
     std::vector<float> left(total, 0.0F);
@@ -498,6 +514,7 @@ ToneGeneratorOptions Session::options() const
     options.delay = settings_.delay;
     options.efx = settings_.efx;
     options.extended_interpolation = settings_.extendedInterpolation;
+    options.flush_before_sysex = settings_.flushBeforeSysEx;
     options.output_gain = settings_.outputGain;
     options.channels = &channels_;
 
@@ -535,7 +552,11 @@ ToneGeneratorOptions Session::options() const
 
 void Session::rebuild()
 {
-    const std::int64_t position = player_ ? player_->position() : 0;
+    // Whether there was a player at all, kept apart from where it stood: with the lead-in skipped a
+    // song's own starting position is not zero, so "zero" is a real place to be and not a sentinel
+    // for "nowhere".
+    const bool was_playing = player_.has_value();
+    const std::int64_t position = was_playing ? player_->position() : 0;
 
     // A rebuild makes fresh parts at their power-on values; capture the outgoing ones first, or a
     // vintage change would silently reset every part to piano.
@@ -562,8 +583,9 @@ void Session::rebuild()
 
         // Put the new generator back where the old one was, so changing vintage mid-song resumes
         // rather than restarting. The seek replays the controllers, which is what makes that sound
-        // right.
-        if (position > 0) {
+        // right -- and it also undoes the fresh player's own lead-in skip, which would otherwise
+        // jump a listener who had scrubbed back into the opening silence forward again.
+        if (was_playing) {
             player_->seek(position);
         }
     }
@@ -571,8 +593,25 @@ void Session::rebuild()
 
 void Session::arm_player()
 {
-    player_.emplace(*engine_, smf::Song{song_events_, song_loop_});
+    player_.emplace(*engine_, smf::Song{song_events_, song_loop_, song_first_note_});
     player_->set_loop_count(looping_ ? -1 : 1);
+
+    // Hand a dense opening over at a cable's rate. The engine drops whatever will not fit in one
+    // control tick's 2,048 packets, which is what the module does to a host that dumps a burst on
+    // it -- but a wire cannot dump one, and this app is standing in for the wire. Without this a
+    // file whose opening bulk dump is longer than the queue loses the end of its own setup and
+    // plays on the wrong patches.
+    player_->set_spread_bursts(true);
+
+    // Then start where the music does. A file that opens with a bar of bank selects and controllers
+    // plays as silence, and someone waiting through it cannot tell that from a file that failed to
+    // load. Nothing is lost: this goes through `seek`, so every controller and SysEx in the lead-in
+    // is still replayed into the engine and only the silence goes.
+    //
+    // After the loop count rather than before, and before the caller's own seek in `rebuild`: a
+    // rebuild arms a fresh player and then puts it back where the old one was, and this must not
+    // be what decides that position.
+    player_->skip_lead_in();
 }
 
 void Session::restore_parts(const std::vector<std::array<int, 7>>& previous)

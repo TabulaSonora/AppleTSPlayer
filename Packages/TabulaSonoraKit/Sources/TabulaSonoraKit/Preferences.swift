@@ -25,6 +25,7 @@ struct Preferences {
         static let efx = "engine.efx"
         static let extendedInterpolation = "engine.extendedInterpolation"
         static let extendedOutputResampler = "engine.extendedOutputResampler"
+        static let flushBeforeSysEx = "engine.flushBeforeSysEx"
         static let outputGain = "engine.outputGain"
         static let latency = "engine.latencyMilliseconds"
         static let looping = "transport.looping"
@@ -50,6 +51,9 @@ struct Preferences {
         if let value = defaults.object(forKey: Key.extendedInterpolation) as? Bool {
             settings.extendedInterpolation = value
         }
+        if let value = defaults.object(forKey: Key.flushBeforeSysEx) as? Bool {
+            settings.flushBeforeSysEx = value
+        }
         // Clamped rather than taken as read, because this is the one setting whose range narrowed:
         // gain only ever adds now, and a value stored by a build that could also cut would leave a
         // slider sitting at its floor while the engine went on rendering below it -- a control
@@ -72,6 +76,7 @@ struct Preferences {
         defaults.set(settings.efx, forKey: Key.efx)
         defaults.set(settings.extendedInterpolation, forKey: Key.extendedInterpolation)
         defaults.set(settings.extendedOutputResampler, forKey: Key.extendedOutputResampler)
+        defaults.set(settings.flushBeforeSysEx, forKey: Key.flushBeforeSysEx)
         defaults.set(settings.outputGain, forKey: Key.outputGain)
     }
 

@@ -59,6 +59,23 @@ struct EngineControlsView: View {
                      + "exactly, limit and all.")
             }
 
+            Section {
+                Toggle("Deliver dropped SysEx", isOn: binding(\.flushBeforeSysEx))
+                    .help("Hand over the messages the module's input queue would have discarded")
+            } header: {
+                Text("Input")
+            } footer: {
+                // Said carefully, because the player already fixes most of what this is for:
+                // `Session::arm_player` spreads a dense opening at a cable's rate, so the usual
+                // symptom -- a file playing on the patches its opening dump chose -- is gone
+                // without this. What is left is the tick nothing can pace around, and claiming
+                // more than that would send someone hunting for a difference they will not hear.
+                //
+                // One literal, not several joined: a concatenation is an expression, and an
+                // expression never reaches the string catalogue.
+                Text("The module's input queue takes 2,048 messages per control tick and drops the rest. The player already hands a dense opening over at a cable's rate, so this reaches only what one tick still cannot take — a dump larger than the queue itself. On delivers it anyway, which the hardware cannot.")
+            }
+
             Section("Effects") {
                 Toggle("Reverb", isOn: binding(\.reverb))
                     .help("The module's reverb send bus")
@@ -134,6 +151,25 @@ struct EngineControlsView: View {
             } footer: {
                 Text("How far ahead the engine renders. Lower answers a keyboard sooner; raise it "
                      + "if you hear dropouts.")
+            }
+
+            // Which copy of the DLL is sounding, now that more than one is accepted. Two people
+            // running this app can be playing through different releases, and the app is the only
+            // thing that knows which -- the file was copied into a container under a name of the
+            // app's choosing, so its name on disk no longer says.
+            if let build = player.romBuild {
+                Section {
+                    LabeledContent("Release", value: build.version)
+                    LabeledContent("Architecture", value: build.architecture)
+                    LabeledContent("Size",
+                                   value: build.length.formatted(.byteCount(style: .file)))
+                } header: {
+                    Text("Sound Canvas ROM")
+                } footer: {
+                    // One literal, not several joined: a concatenation is an expression, and an
+                    // expression never reaches the string catalogue.
+                    Text("The tables and the wave ROM are the same data in every release the app takes, so this says which file was imported, not how good it is.")
+                }
             }
         }
         .formStyle(.grouped)

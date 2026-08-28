@@ -131,4 +131,20 @@ enum TestSong {
         track += [0x00, 0xFF, 0x2F, 0x00]
         return smf(track: track)
     }
+
+    /// Two silent bars of setup, then one note.
+    ///
+    /// What a player has to skip past: at 96 ticks a quarter and the default tempo, the note-on is
+    /// 384 ticks -- two seconds, 64,000 frames -- into a file whose first two seconds make no sound
+    /// at all. The setup is real messages, so a skip that simply started later would lose them.
+    static func leadInThenNote() -> Data {
+        var track: [UInt8] = []
+        track += [0x00, 0xB0, 0x00, 0x00]        // bank select MSB
+        track += [0x00, 0xC0, 0x30]              // program change
+        track += [0x00, 0xB0, 0x07, 0x64]        // volume
+        track += variableLength(384) + [0x90, 0x3C, 0x64]
+        track += [0x83, 0x00, 0x80, 0x3C, 0x00]
+        track += endOfTrack
+        return smf(track: track)
+    }
 }
