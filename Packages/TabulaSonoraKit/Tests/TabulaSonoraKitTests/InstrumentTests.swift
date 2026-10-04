@@ -407,4 +407,103 @@ struct InstrumentTests {
 
         #expect(louder > plain, "gain did not reach the mix (\(plain) then \(louder))")
     }
+
+    /// A GS file's second drum part: GS Reset, then channel 11 put on drum map 2 and given the
+    /// Power kit, which as a melodic program is Organ 1.
+    private static func sendSecondDrumPart(to instrument: TSInstrument) {
+        let messages: [[UInt8]] = [
+            [0xF0, 0x41, 0x10, 0x42, 0x12, 0x40, 0x00, 0x7F, 0x00, 0x41, 0xF7],
+            [0xF0, 0x41, 0x10, 0x42, 0x12, 0x40, 0x1A, 0x15, 0x02, 0x0F, 0xF7],
+        ]
+        for message in messages {
+            message.withUnsafeBufferPointer {
+                TSInstrumentSendSysEx(instrument.handle, 0, $0.baseAddress!, UInt32($0.count))
+            }
+        }
+        TSInstrumentSendChannel(instrument.handle, 0, 0xCA, 16, 0)
+    }
+
+    /// A snare on channel 11: a drum on the drum path, a held organ note on the melodic one.
+    private func playChannel11(_ instrument: TSInstrument) -> [Float] {
+        TSInstrumentSendChannel(instrument.handle, 0, 0x9A, 38, 100)
+
+        let frames = 8192
+        var left = [Float](repeating: 0, count: frames)
+        var right = [Float](repeating: 0, count: frames)
+        left.withUnsafeMutableBufferPointer { l in
+            right.withUnsafeMutableBufferPointer { r in
+                TSInstrumentRender(instrument.handle, l.baseAddress!, r.baseAddress!, UInt32(frames))
+            }
+        }
+        return left
+    }
+
+    private func largestDifference(_ a: [Float], _ b: [Float]) -> Float {
+        zip(a, b).map { abs($0 - $1) }.max() ?? 0
+    }
+
+    /// What a host sends before the ROM has finished loading is heard once it has.
+    ///
+    /// A host plays a song the moment the plugin exists, and the plugin reads its tables in the
+    /// background, so a file's opening SysEx lands on a session with no generator. Cog playing
+    /// `ag5nju.mid` is the case that showed it: the GS Reset and the use-for-rhythm at the first
+    /// tick were thrown away, the program change half a second later was not, and channel 11 played
+    /// its kit number as an organ.
+    @Test(.enabled(if: romPath != nil))
+    func whatArrivesBeforeTheROMIsHeardAfterIt() throws {
+        let early = TSInstrument()
+        Self.sendSecondDrumPart(to: early)
+        try early.loadROM(atPath: Self.romPath!, verifyFully: false)
+        early.prepare(forSampleRate: 48_000, maximumFrames: 8192)
+
+        let reference = TSInstrument()
+        try reference.loadROM(atPath: Self.romPath!, verifyFully: false)
+        reference.prepare(forSampleRate: 48_000, maximumFrames: 8192)
+        Self.sendSecondDrumPart(to: reference)
+
+        // The organ, for proof that the comparison can tell the two apart at all.
+        let organ = TSInstrument()
+        try organ.loadROM(atPath: Self.romPath!, verifyFully: false)
+        organ.prepare(forSampleRate: 48_000, maximumFrames: 8192)
+        TSInstrumentSendChannel(organ.handle, 0, 0xCA, 16, 0)
+
+        let heard = playChannel11(early)
+        let meant = playChannel11(reference)
+        let melodic = playChannel11(organ)
+
+        #expect(meant.contains { abs($0) > 0.001 }, "the snare made no sound")
+        #expect(largestDifference(meant, melodic) > 0.01, "the drum part sounds like the organ")
+        #expect(largestDifference(heard, meant) < 1e-6,
+                "the stream sent before the ROM loaded was not heard (\(largestDifference(heard, meant)))")
+    }
+
+    /// A rebuild keeps everything the stream set up, SysEx included.
+    ///
+    /// It used to carry six controllers and a program per part, which dropped every part's drum
+    /// routing: changing any setting turned a second drum part back into whatever its kit number
+    /// is as a melodic program.
+    @Test(.enabled(if: romPath != nil))
+    func aRebuildKeepsWhatTheStreamSetUp() throws {
+        var changed = TSEngineSettingsDefault()
+        changed.extendedInterpolation.toggle()
+
+        let rebuilt = TSInstrument()
+        try rebuilt.loadROM(atPath: Self.romPath!, verifyFully: false)
+        rebuilt.prepare(forSampleRate: 48_000, maximumFrames: 8192)
+        Self.sendSecondDrumPart(to: rebuilt)
+        rebuilt.apply(changed)
+
+        let reference = TSInstrument()
+        try reference.loadROM(atPath: Self.romPath!, verifyFully: false)
+        reference.apply(changed)
+        reference.prepare(forSampleRate: 48_000, maximumFrames: 8192)
+        Self.sendSecondDrumPart(to: reference)
+
+        let heard = playChannel11(rebuilt)
+        let meant = playChannel11(reference)
+
+        #expect(meant.contains { abs($0) > 0.001 }, "the snare made no sound")
+        #expect(largestDifference(heard, meant) < 1e-6,
+                "the rebuild lost what the stream set up (\(largestDifference(heard, meant)))")
+    }
 }

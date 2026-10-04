@@ -31,6 +31,12 @@ namespace ts::apple {
 /// free except for the moment a rebuild takes. A miss costs one block of silence, and the only
 /// operation that can cause one already resets every sounding voice.
 ///
+/// A miss must not cost the MIDI that arrived during it, though. A message the audio thread cannot
+/// hand over waits in `deferred_` for the next time the lock is free, and the session records what
+/// it is told so a rebuild -- or the first generator, once the ROM has loaded -- hears it again.
+/// Dropping them was how a host's opening GS Reset and drum routing went missing whenever a song
+/// started while a freshly inserted plugin was still reading its tables.
+///
 /// The engine renders at 32 kHz and a host runs at whatever its device does, so this resamples on
 /// the way out -- the one job the app leaves to CoreAudio's mixer and a plugin has to do itself.
 class Instrument {
@@ -122,6 +128,9 @@ private:
     /// this port's Hermite. Called with the lock held and the gain already applied.
     void render_through_module(float* left, float* right, std::uint32_t frames) noexcept;
 
+    /// Hands the session whatever arrived while the lock was taken. Called with the lock held.
+    void flush_deferred() noexcept;
+
     std::unique_ptr<Session> session_;
 
     /// Guards `session_`. Taken with `try_lock` on the audio thread and never held there across
@@ -129,6 +138,13 @@ private:
     mutable std::mutex lock_;
 
     TSEngineSettings settings_ = TSEngineSettingsDefault();
+
+    /// MIDI that arrived while a control call held the lock, in arrival order, notes included.
+    ///
+    /// Touched only by the audio thread -- it is where `send_channel`, `send_sysex` and `render`
+    /// all run -- so it needs no lock of its own. Reserved here and never grown: a burst too big for
+    /// it loses its newest messages, which is still far better than losing all of them.
+    MessageLog deferred_{1024, 64 * 1024};
 
     /// `engine_rate / output_rate`: input frames consumed per output frame.
     double ratio_ = 1.0;

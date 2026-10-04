@@ -69,6 +69,12 @@ void Instrument::load_rom(const std::string& path, bool verify_fully)
     {
         const std::lock_guard<std::mutex> guard{lock_};
         previous = std::move(session_);
+
+        // Everything the host sent while the tables were reading went to the outgoing session,
+        // which on a first load had no generator to hear it. Replayed here, under the lock, so no
+        // message can land between the replay and the swap.
+        next->adopt_live_state(*previous);
+
         session_ = std::move(next);
         has_rom_.store(session_->has_rom(), std::memory_order_relaxed);
     }
@@ -244,6 +250,8 @@ void Instrument::render(float* left, float* right, std::uint32_t frames) noexcep
         return;
     }
 
+    flush_deferred();
+
     if (gain_changed_.exchange(false, std::memory_order_acquire)) {
         session_->set_output_gain(gain_.load(std::memory_order_relaxed));
     }
@@ -309,8 +317,10 @@ void Instrument::send_channel(int port, int status, int data1, int data2) noexce
 {
     const std::unique_lock<std::mutex> guard{lock_, std::try_to_lock};
     if (!guard.owns_lock()) {
+        deferred_.push_channel(port, status, data1, data2);
         return;
     }
+    flush_deferred();
     session_->send_channel(port, status, data1, data2);
 }
 
@@ -320,11 +330,29 @@ void Instrument::send_sysex(int port, const std::uint8_t* bytes, std::size_t siz
         return;
     }
 
+    const std::span<const std::uint8_t> message{bytes, size};
     const std::unique_lock<std::mutex> guard{lock_, std::try_to_lock};
     if (!guard.owns_lock()) {
+        deferred_.push_sysex(port, message);
         return;
     }
-    session_->send_sysex(port, std::span<const std::uint8_t>{bytes, size});
+    flush_deferred();
+    session_->send_sysex(port, message);
+}
+
+void Instrument::flush_deferred() noexcept
+{
+    if (deferred_.empty()) {
+        return;
+    }
+    for (const auto& entry : deferred_.entries()) {
+        if (entry.is_sysex()) {
+            session_->send_sysex(entry.port, deferred_.sysex(entry));
+        } else {
+            session_->send_channel(entry.port, entry.status, entry.data1, entry.data2);
+        }
+    }
+    deferred_.clear();
 }
 
 void Instrument::set_output_gain(double gain) noexcept

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "TSSongInfo.hpp"
+#include "TSStateLog.hpp"
 #include "TSTypes.h"
 
 #include "tabulasonora/build_registry.hpp"
@@ -165,7 +166,8 @@ public:
     /// that has just run over the same bytes.
     [[nodiscard]] const SongInfo& song_info() const noexcept { return song_info_; }
 
-    /// All the generator settings at once: one rebuild, with part state carried across it.
+    /// All the generator settings at once: one rebuild, with the live stream's state replayed
+    /// across it -- see `live_state_`.
     void set_settings(const TSEngineSettings& settings);
     [[nodiscard]] const TSEngineSettings& settings() const noexcept { return settings_; }
 
@@ -233,6 +235,14 @@ public:
     /// Reset to an engine that cannot hear one is playing a module that was never told what it is.
     void send_sysex(int port, std::span<const std::uint8_t> bytes);
 
+    /// Takes over what `from` has been told by live MIDI, and tells this session's generator.
+    ///
+    /// For a plugin swapping in a session it built off the lock: the host has been sending to the
+    /// outgoing one the whole time the new one was reading its tables, and that outgoing one may
+    /// never have had a generator to hear it. A host opens a song with its GS Reset and drum
+    /// routing at the first tick, which is exactly while a freshly inserted plugin is still loading.
+    void adopt_live_state(Session& from);
+
     /// The gain on the finished mix, without a rebuild.
     ///
     /// Kept apart from `set_settings` because it is the one setting that is a plain store into the
@@ -296,7 +306,6 @@ private:
     [[nodiscard]] ToneGeneratorOptions options() const;
     void rebuild();
     void arm_player();
-    void restore_parts(const std::vector<std::array<int, 7>>& previous);
     void send_control(int port, int channel, int controller, int value);
 
     std::optional<RomImage> rom_;
@@ -332,6 +341,14 @@ private:
     /// Zero until a host says otherwise, which reads as the engine's own rate.
     int host_rate_ = 0;
     ChannelMask channels_;
+
+    /// What live MIDI has set up since the last reset, replayed into every generator this session
+    /// builds while no song is loaded. Recorded whether or not there is a generator to hear it, so
+    /// that a stream which arrives before the ROM has loaded is still heard once it has.
+    ///
+    /// Not used with a song loaded: the rebuild then puts the song back where it was through
+    /// `seek`, which resets the generator and replays the file, and the file is the state.
+    StateLog live_state_;
 };
 
 } // namespace ts::apple

@@ -139,6 +139,16 @@ silence rather than waiting, which only happens during a rebuild — which takes
 anyway. Nothing on that path allocates: `prepare(rate, maxFrames)` from `allocateRenderResources`
 sizes every buffer once.
 
+**MIDI is never dropped on a missed lock, and a new generator is told the stream again.** A message
+the audio thread cannot hand over waits in `Instrument::deferred_` until the lock is next free. And
+`Session::live_state_` (`TSStateLog.hpp`) records every state-bearing message — SysEx included, notes
+not, emptied by any reset — and replays it into each generator built while no song is loaded: on a
+rebuild, and on `load_rom`'s swap, where `adopt_live_state` hands over what the outgoing session heard.
+That swap matters more than it looks. A host starts playing the moment the plugin exists, while the
+ROM is still loading, so a file's opening GS Reset and drum routing land on a session that has no
+generator yet. Before the log existed, rebuilds carried six controllers and a program per part, and
+a GS file's second drum part came back as its kit number played as a melodic program.
+
 `TSInstrumentRender` and its three neighbours in `TSEngine.h` are plain C for the same reason
 `TSEngineRingRead` is: a render block may not send an Objective-C message or touch the Swift runtime.
 `TabulaSonoraKit.Instrument` is deliberately **not** `@MainActor` — a host calls a plugin on threads
@@ -204,8 +214,9 @@ it did not pick.
   opening with a long bulk dump plays on the patches the dump chose. On delivers what the queue would
   have thrown away, which is something the module cannot be made to do — upstream measured that
   flushing more often changes nothing, because the bound is on a buffer only the tick drains.
-- Changing any `EngineSettings` but `outputGain` rebuilds the `ToneGenerator` (part state replayed
-  across it, sounding voices lost) but never the `NoteRenderer` — tables are read once per session.
+- Changing any `EngineSettings` but `outputGain` rebuilds the `ToneGenerator` (the live stream's state
+  replayed across it, or the song re-seeked; sounding voices lost) but never the `NoteRenderer` —
+  tables are read once per session.
 - Underruns are surfaced all the way to the UI on purpose. Never hide them.
 - **Playback is not a render, in two places the engine leaves to the caller.** `Session::arm_player`
   turns on `set_spread_bursts` — the engine drops what will not fit in one control tick's 2,048

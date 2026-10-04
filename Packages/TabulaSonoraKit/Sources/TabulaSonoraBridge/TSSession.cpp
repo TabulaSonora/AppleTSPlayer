@@ -133,6 +133,9 @@ void Session::load_song(const std::string& path)
         song_info_.loop_soft = song_loop_->soft;
     }
 
+    // Whatever live MIDI set up goes with the reset below: the song is the state from here on.
+    live_state_.clear();
+
     if (engine_) {
         engine_->reset();
         arm_player();
@@ -149,6 +152,7 @@ void Session::unload_song()
     song_first_note_ = 0;
     song_info_ = {};
     used_channels_.fill(false);
+    live_state_.clear();
     if (engine_) {
         engine_->reset();
     }
@@ -221,6 +225,7 @@ bool Session::complete() const noexcept
 
 void Session::panic()
 {
+    live_state_.clear();
     if (engine_) {
         engine_->reset();
     }
@@ -289,6 +294,7 @@ bool Session::xg_mode() const noexcept
 
 void Session::send_channel(int port, int status, int data1, int data2)
 {
+    live_state_.record_channel(port, status, data1, data2);
     if (engine_) {
         engine_->send_channel(port, status, data1, data2);
     }
@@ -296,8 +302,18 @@ void Session::send_channel(int port, int status, int data1, int data2)
 
 void Session::send_sysex(int port, std::span<const std::uint8_t> bytes)
 {
+    live_state_.record_sysex(port, bytes);
     if (engine_ && !bytes.empty()) {
         engine_->send_sysex(port, bytes);
+    }
+}
+
+void Session::adopt_live_state(Session& from)
+{
+    live_state_ = std::move(from.live_state_);
+    from.live_state_.clear();
+    if (engine_ && !player_) {
+        live_state_.replay(*engine_);
     }
 }
 
@@ -558,27 +574,17 @@ void Session::rebuild()
     const bool was_playing = player_.has_value();
     const std::int64_t position = was_playing ? player_->position() : 0;
 
-    // A rebuild makes fresh parts at their power-on values; capture the outgoing ones first, or a
-    // vintage change would silently reset every part to piano.
-    std::vector<std::array<int, 7>> previous;
-    if (engine_) {
-        previous.reserve(static_cast<std::size_t>(engine_->parts()));
-        for (int index = 0; index < engine_->parts(); ++index) {
-            const Part& part = engine_->part(index);
-            previous.push_back({part.bank, part.program, part.volume(), part.pan, part.expression(),
-                                part.reverb_send, part.chorus_send});
-        }
-    }
-
     // The player holds a pointer into the outgoing engine, so it goes first.
     player_.reset();
     engine_.emplace(*notes_, options());
 
-    if (!previous.empty()) {
-        restore_parts(previous);
-    }
-
-    if (!song_events_.empty()) {
+    // A rebuild makes fresh parts at their power-on values. With no song, the live stream is the
+    // only record of what they were, so it is told again -- the whole of it, SysEx included,
+    // rather than a program and five controllers per part, which is what this used to carry and
+    // which lost every part's drum routing on any change of setting.
+    if (song_events_.empty()) {
+        live_state_.replay(*engine_);
+    } else {
         arm_player();
 
         // Put the new generator back where the old one was, so changing vintage mid-song resumes
@@ -612,31 +618,6 @@ void Session::arm_player()
     // rebuild arms a fresh player and then puts it back where the old one was, and this must not
     // be what decides that position.
     player_->skip_lead_in();
-}
-
-void Session::restore_parts(const std::vector<std::array<int, 7>>& previous)
-{
-    for (int index = 0; index < static_cast<int>(previous.size()); ++index) {
-        const auto& [bank, program, volume, pan, expression, reverb, chorus] =
-            previous[static_cast<std::size_t>(index)];
-
-        // A part index is not a channel. `port * 16 + channel` has to come apart again before it
-        // can go back out as MIDI: a status byte carries four bits of channel and the port travels
-        // beside it, so `0xC0 | 16` is not part 17's program change.
-        const int port = index / Sequence::channel_count;
-        const int channel = index % Sequence::channel_count;
-
-        // Bank before program, as anything selecting a sound must: the program change latches the
-        // pair, and it is what brings a drum kit back with it.
-        send_control(port, channel, 0, bank);
-        engine_->send_channel(port, 0xC0 | channel, program, 0);
-
-        send_control(port, channel, 7, volume);
-        send_control(port, channel, 10, pan);
-        send_control(port, channel, 11, expression);
-        send_control(port, channel, 91, reverb);
-        send_control(port, channel, 93, chorus);
-    }
 }
 
 } // namespace ts::apple
