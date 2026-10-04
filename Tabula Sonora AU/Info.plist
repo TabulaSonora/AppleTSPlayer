@@ -33,7 +33,7 @@
 					  is the one installed, so it moves with MARKETING_VERSION in project.pbxproj.
 					-->
 					<key>version</key>
-					<integer>196608</integer>
+					<integer>196609</integer>
 				</dict>
 			</array>
 		</dict>
